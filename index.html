@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoboTask Universe</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --surface2: #1e1e1e;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text-muted: #888;
+    --accent: #7c6cfc;
+    --accent-glow: rgba(124,108,252,0.3);
+    --demonstrated: #7c6cfc;
+    --near-term: #f59e0b;
+    --future: #374151;
+    --future-border: #555;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; overflow: hidden; }
+
+  /* HEADER */
+  #header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    flex-shrink: 0;
+  }
+  #header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  #header-title { display: flex; align-items: baseline; gap: 12px; }
+  #header-title h1 {
+    font-size: 20px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #7c6cfc, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #header-title p { font-size: 12px; color: var(--text-muted); }
+  #legend {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+    align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot-d { color: var(--demonstrated); font-size: 14px; }
+  .legend-dot-n { color: var(--near-term); font-size: 14px; }
+  .legend-dot-f { color: var(--future-border); font-size: 14px; }
+
+  /* STATS BAR */
+  #stats-bar {
+    display: flex;
+    gap: 24px;
+    padding: 8px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .stat { display: flex; flex-direction: column; }
+  .stat-value { font-size: 18px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .stat-label { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+
+  /* FILTERS */
+  #filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  #search-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 5px 10px;
+    font-size: 13px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #search-input:focus { border-color: var(--accent); }
+  #search-input::placeholder { color: var(--text-muted); }
+
+  .filter-group { display: flex; gap: 4px; }
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  #category-filters {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .cat-chip {
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    opacity: 0.5;
+  }
+  .cat-chip.active { opacity: 1; }
+  .cat-chip:hover { opacity: 0.8; }
+
+  /* MAIN CONTENT */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* TREEMAP */
+  #treemap-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  #treemap-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Cell styles */
+  .cell rect {
+    stroke-width: 2px;
+    transition: opacity 0.2s;
+  }
+  .cell rect.status-demonstrated {
+    stroke-dasharray: none;
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+  .cell rect.status-near-term {
+    stroke-dasharray: 5 3;
+  }
+  .cell rect.status-future {
+    stroke-dasharray: 2 4;
+    stroke-width: 1.5px;
+    opacity: 0.6;
+  }
+  .cell text {
+    pointer-events: none;
+    user-select: none;
+  }
+  .cell:hover rect { opacity: 0.85; cursor: pointer; }
+  .cell.filtered-out rect { opacity: 0.1; }
+  .cell.filtered-out text { opacity: 0.1; }
+
+  .category-label {
+    pointer-events: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    fill: rgba(255,255,255,0.5);
+  }
+
+  /* TOOLTIP */
+  #tooltip {
+    position: fixed;
+    background: rgba(20,20,20,0.97);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+    max-width: 240px;
+    backdrop-filter: blur(8px);
+  }
+  #tooltip.visible { opacity: 1; }
+  .tt-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .tt-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-muted); margin-top: 2px; }
+  .tt-badge {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .badge-demonstrated { background: rgba(124,108,252,0.2); color: #a78bfa; border: 1px solid rgba(124,108,252,0.4); }
+  .badge-near-term { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+  .badge-future { background: rgba(55,65,81,0.4); color: #9ca3af; border: 1px solid rgba(75,85,99,0.5); }
+
+  /* SIDE PANEL */
+  #side-panel {
+    width: 380px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    z-index: 20;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+  }
+  #side-panel.open { transform: translateX(0); }
+  #panel-content { padding: 20px; }
+  #panel-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  #panel-close:hover { color: var(--text); border-color: var(--accent); }
+  #panel-task-name { font-size: 20px; font-weight: 700; margin-bottom: 10px; line-height: 1.2; padding-right: 36px; }
+  #panel-category { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+
+  .panel-section { margin-bottom: 16px; }
+  .panel-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
+  .panel-value { font-size: 13px; color: var(--text); }
+
+  .difficulty-dots { display: flex; gap: 4px; }
+  .diff-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .diff-dot.filled { background: var(--accent); }
+  .diff-dot.empty { background: var(--surface2); border: 1px solid var(--border); }
+
+  .trl-bar-bg {
+    background: var(--surface2);
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .trl-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #10b981, #7c6cfc); }
+  .trl-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  .panel-desc { font-size: 13px; color: #ccc; line-height: 1.5; }
+
+  .companies-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .company-pill {
+    background: rgba(124,108,252,0.1);
+    border: 1px solid rgba(124,108,252,0.25);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: #a78bfa;
+  }
+
+  .tags-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .panel-source { font-size: 12px; }
+  .panel-source a { color: var(--accent); text-decoration: none; }
+  .panel-source a:hover { text-decoration: underline; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+  /* Empty state */
+  #empty-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    text-align: center;
+    color: var(--text-muted);
+    display: none;
+  }
+  #empty-state.visible { display: block; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="header-top">
+      <div id="header-title">
+        <h1>🤖 RoboTask Universe</h1>
+        <p>The complete landscape of robot task demonstrations — what's been done, what's coming, and what's next</p>
+      </div>
+      <div id="legend">
+        <div class="legend-item"><span class="legend-dot-d">●</span> Demonstrated</div>
+        <div class="legend-item"><span class="legend-dot-n">◌</span> Near-Term</div>
+        <div class="legend-item"><span class="legend-dot-f">○</span> Future</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats-bar">
+    <div class="stat"><span class="stat-value" id="stat-total">—</span><span class="stat-label">Total Tasks</span></div>
+    <div class="stat"><span class="stat-value" id="stat-demonstrated">—</span><span class="stat-label">Demonstrated</span></div>
+    <div class="stat"><span class="stat-value" id="stat-pct">—</span><span class="stat-label">% Proven</span></div>
+    <div class="stat"><span class="stat-value" id="stat-nearterm">—</span><span class="stat-label">Near-Term</span></div>
+    <div class="stat"><span class="stat-value" id="stat-future">—</span><span class="stat-label">Future</span></div>
+    <div class="stat"><span class="stat-value" id="stat-companies">—</span><span class="stat-label">Companies Tracked</span></div>
+    <div class="stat"><span class="stat-value" id="stat-categories">—</span><span class="stat-label">Categories</span></div>
+  </div>
+
+  <div id="filters">
+    <input id="search-input" type="text" placeholder="🔍 Search tasks…" />
+    <div class="filter-group" id="status-filters">
+      <button class="filter-btn active" data-status="all">All</button>
+      <button class="filter-btn" data-status="demonstrated">Demonstrated</button>
+      <button class="filter-btn" data-status="near-term">Near-Term</button>
+      <button class="filter-btn" data-status="future">Future</button>
+    </div>
+    <div id="category-filters"></div>
+  </div>
+
+  <div id="main">
+    <div id="treemap-container">
+      <svg id="treemap-svg"></svg>
+      <div id="empty-state">No tasks match your filters.</div>
+    </div>
+    <div id="side-panel">
+      <button id="panel-close">✕</button>
+      <div id="panel-content">
+        <div id="panel-task-name"></div>
+        <div id="panel-category"></div>
+        <div class="panel-section">
+          <div class="panel-label">Status</div>
+          <div id="panel-status"></div>
+        </div>
+        <hr class="divider">
+        <div style="display:flex;gap:20px;">
+          <div class="panel-section" style="flex:1">
+            <div class="panel-label">Difficulty</div>
+            <div class="difficulty-dots" id="panel-difficulty"></div>
+          </div>
+          <div class="panel-section" style="flex:1">
+            <div class="panel-label">Dexterity</div>
+            <div class="panel-value" id="panel-dexterity"></div>
+          </div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-label">Technology Readiness Level (TRL)</div>
+          <div class="trl-bar-bg"><div class="trl-bar-fill" id="panel-trl-bar"></div></div>
+          <div class="trl-label" id="panel-trl-text"></div>
+        </div>
+        <hr class="divider">
+        <div class="panel-section">
+          <div class="panel-label">Description</div>
+          <div class="panel-desc" id="panel-desc"></div>
+        </div>
+        <div class="panel-section" id="panel-companies-section">
+          <div class="panel-label">Companies</div>
+          <div class="companies-list" id="panel-companies"></div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-label">Tags</div>
+          <div class="tags-list" id="panel-tags"></div>
+        </div>
+        <div class="panel-section" id="panel-demo-section">
+          <div class="panel-label">First Demo</div>
+          <div class="panel-value" id="panel-demo"></div>
+        </div>
+        <div class="panel-section" id="panel-source-section">
+          <div class="panel-label">Source</div>
+          <div class="panel-source" id="panel-source"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const CATEGORY_COLORS = {
+  "Textile & Soft Materials": "#7c6cfc",
+  "Kitchen & Food":           "#f59e0b",
+  "Assembly & Manufacturing": "#10b981",
+  "Object Manipulation":      "#3b82f6",
+  "Household & Living":       "#ec4899",
+  "Logistics & Warehousing":  "#f97316",
+  "Bimanual & Dexterous":     "#8b5cf6",
+  "Mobile Manipulation":      "#06b6d4",
+  "Healthcare":               "#ef4444",
+  "Agriculture":              "#84cc16",
+  "Construction":             "#a16207",
+  "Care":                     "#f43f5e",
+  "Safety":                   "#dc2626",
+  "Extreme Environments":     "#0ea5e9",
+  "Science":                  "#14b8a6",
+};
+
+const TASKS = [
+  // ── DEMONSTRATED ──────────────────────────────────────────────────────
+  // Textile & Soft Materials
+  {id:1, name:"Laundry Folding", category:"Textile & Soft Materials", subcategory:"Laundry", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence","Dyna Robotics","1X Technologies"],
+   description:"Unload dryer, transport garments to table, fold into neat stack",
+   firstDemo:"2024", trl:6, tags:["bimanual","deformable","long-horizon"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:2, name:"Shirt Folding", category:"Textile & Soft Materials", subcategory:"Laundry", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence","1X Technologies","Figure AI"],
+   description:"Flatten, align, and fold a shirt to retail standard",
+   firstDemo:"2024", trl:6, tags:["bimanual","deformable"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:3, name:"Napkin Folding", category:"Textile & Soft Materials", subcategory:"Textiles", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Dyna Robotics"],
+   description:"Dyna-1 ran 24 hours straight folding napkins to restaurant standards — first production-grade demo",
+   firstDemo:"2025", trl:8, tags:["production","24h-continuous","bimanual"],
+   sourceUrl:"https://roboticsandautomationnews.com/2025/05/01/dyna-robotics-unveils-breakthrough-in-robust-real-world-embodied-ai/90152/"},
+  {id:4, name:"Cloth Folding", category:"Textile & Soft Materials", subcategory:"Textiles", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","synphonyco","Columbia UMI"],
+   description:"Fold various cloth items including sweaters and dish towels",
+   firstDemo:"2024", trl:7, tags:["deformable","bimanual"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:5, name:"Towel Folding", category:"Textile & Soft Materials", subcategory:"Laundry", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","Toyota Research"],
+   description:"Fold bath towels into thirds or quarters",
+   firstDemo:"2023", trl:6, tags:["deformable","bimanual"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:6, name:"Sock Matching & Pairing", category:"Textile & Soft Materials", subcategory:"Laundry", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence"],
+   description:"Find matching sock pairs from a pile, fold together",
+   firstDemo:"2024", trl:5, tags:["deformable","bimanual","sorting"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:7, name:"Bag Packing", category:"Textile & Soft Materials", subcategory:"Packing", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","Figure AI"],
+   description:"Load items into a bag or box systematically",
+   firstDemo:"2024", trl:6, tags:["bimanual","long-horizon"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  // Kitchen & Food
+  {id:8, name:"Table Clearing", category:"Kitchen & Food", subcategory:"Cleanup", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence","1X Technologies"],
+   description:"Clear dishes, cups, and debris from a table into appropriate places",
+   firstDemo:"2024", trl:7, tags:["long-horizon","semantic"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:9, name:"Dishes in Microwave", category:"Kitchen & Food", subcategory:"Appliance Use", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence"],
+   description:"Pick up plate, open microwave door, place inside, close door",
+   firstDemo:"2024", trl:6, tags:["semantic","precision"],
+   sourceUrl:"https://arxiv.org/html/2410.24164v1"},
+  {id:10, name:"Egg Stacking into Carton", category:"Kitchen & Food", subcategory:"Food Handling", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence"],
+   description:"Pick individual eggs and place them in an egg carton without breaking",
+   firstDemo:"2024", trl:5, tags:["fragile","precision","bimanual"],
+   sourceUrl:"https://arxiv.org/html/2410.24164v1"},
+  {id:11, name:"Coffee Bean Scooping", category:"Kitchen & Food", subcategory:"Food Handling", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence"],
+   description:"Scoop coffee beans with a spoon or scoop into a container",
+   firstDemo:"2025", trl:6, tags:["granular","precision"],
+   sourceUrl:"https://pi.website/blog/openpi"},
+  {id:12, name:"Grocery Bagging", category:"Kitchen & Food", subcategory:"Packing", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","Figure AI"],
+   description:"Sort and bag groceries by category/fragility",
+   firstDemo:"2024", trl:6, tags:["long-horizon","sorting","bimanual"],
+   sourceUrl:"https://arxiv.org/html/2410.24164v1"},
+  {id:13, name:"Spill Wiping", category:"Kitchen & Food", subcategory:"Cleanup", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence"],
+   description:"Detect a spill, find appropriate cloth/paper towel, wipe surface clean",
+   firstDemo:"2025", trl:6, tags:["semantic","tool-use"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  {id:14, name:"Dishwasher Loading", category:"Kitchen & Food", subcategory:"Cleanup", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","1X Technologies"],
+   description:"Load dirty dishes into dishwasher racks correctly",
+   firstDemo:"2025", trl:6, tags:["long-horizon","semantic","bimanual"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  {id:15, name:"Kitchen Cleanup", category:"Kitchen & Food", subcategory:"Cleanup", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence"],
+   description:"Navigate entire kitchen, clean surfaces, put items away",
+   firstDemo:"2025", trl:6, tags:["long-horizon","semantic","mobile"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  // Assembly & Manufacturing
+  {id:16, name:"Box Assembly", category:"Assembly & Manufacturing", subcategory:"Packaging", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence"],
+   description:"Fold cardboard box, close flaps, tape shut — physically intricate bimanual task",
+   firstDemo:"2024", trl:6, tags:["bimanual","precision","long-horizon"],
+   sourceUrl:"https://pi.website/blog/pistar06"},
+  {id:17, name:"Smartphone Packaging", category:"Assembly & Manufacturing", subcategory:"Packaging", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Generalist AI"],
+   description:"GEN-0 live demo at NVIDIA GTC 2026 — autonomously packs phones, first live public demo",
+   firstDemo:"2026", trl:6, tags:["precision","production","bimanual"],
+   sourceUrl:"https://generalistai.com/"},
+  {id:18, name:"Automotive Parts Picking", category:"Assembly & Manufacturing", subcategory:"Industrial", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Figure AI","Apptronik"],
+   description:"Figure 02 at BMW, Apollo at Mercedes — pick automotive components from bins for assembly line",
+   firstDemo:"2024", trl:7, tags:["production","pick-place","industrial"],
+   sourceUrl:"https://businessinsider.com/humanoid-robot-companies-us-tesla-figure-1x-agility-apptronik-2025-11"},
+  {id:19, name:"PCB Component Insertion", category:"Assembly & Manufacturing", subcategory:"Electronics", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Dexterous Robotics","Symbio Robotics"],
+   description:"Insert small electronic components into PCB boards — submillimeter precision",
+   firstDemo:"2024", trl:5, tags:["precision","industrial","bimanual"],
+   sourceUrl:null},
+  {id:20, name:"Screw Driving", category:"Assembly & Manufacturing", subcategory:"Fastening", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Apptronik","Universal Robots + Scale AI"],
+   description:"Use a screwdriver or powered driver to fasten screws in assembly operations",
+   firstDemo:"2023", trl:7, tags:["tool-use","precision","industrial"],
+   sourceUrl:"https://thenextweb.com/news/universal-robots-and-scale-ai-launch-the-ur-ai-trainer"},
+  // Object Manipulation
+  {id:21, name:"Pick and Place", category:"Object Manipulation", subcategory:"Foundational", status:"demonstrated",
+   difficulty:2, dexterityRequired:"medium",
+   companies:["Physical Intelligence","Figure AI","1X Technologies","Agility Robotics","Boston Dynamics","Unitree","Dyna Robotics","Generalist AI","synphonyco"],
+   description:"The foundational robot task — grasp an object from one location and place it at a target location",
+   firstDemo:"2015", trl:9, tags:["foundational","universal"],
+   sourceUrl:null},
+  {id:22, name:"Bin Picking", category:"Object Manipulation", subcategory:"Industrial", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Agility Robotics","Boston Dynamics Stretch","Mujin","Covariant"],
+   description:"Pick items from unstructured bins — handles occlusion, varied poses",
+   firstDemo:"2019", trl:8, tags:["industrial","sorting","unstructured"],
+   sourceUrl:null},
+  {id:23, name:"Object Sorting", category:"Object Manipulation", subcategory:"Classification", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence","Figure AI","Covariant","Intrinsic"],
+   description:"Sort objects by category, color, size, or destination",
+   firstDemo:"2020", trl:8, tags:["classification","industrial"],
+   sourceUrl:null},
+  {id:24, name:"Stacking", category:"Object Manipulation", subcategory:"Precision", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence","DeepMind","Boston Dynamics"],
+   description:"Stack objects in a stable tower or organized formation",
+   firstDemo:"2021", trl:7, tags:["precision","balance"],
+   sourceUrl:null},
+  {id:25, name:"Novel Object Grasping", category:"Object Manipulation", subcategory:"Generalization", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","Google RT-2","Generalist AI"],
+   description:"Grasp objects never seen in training — testing true generalization",
+   firstDemo:"2023", trl:6, tags:["generalization","zero-shot"],
+   sourceUrl:"https://pi.website/blog/pi0"},
+  {id:26, name:"Deformable Object Handling", category:"Object Manipulation", subcategory:"Deformable", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence","Columbia UMI","MIT"],
+   description:"Manipulate soft, flexible, or deformable objects like ropes, cloth, dough",
+   firstDemo:"2023", trl:5, tags:["deformable","research","bimanual"],
+   sourceUrl:null},
+  {id:27, name:"Fragile Object Handling", category:"Object Manipulation", subcategory:"Force Control", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","Dexterous Robotics"],
+   description:"Handle delicate items (eggs, glassware, fruit) without breaking — requires gentle force control",
+   firstDemo:"2024", trl:5, tags:["fragile","force-control","precision"],
+   sourceUrl:"https://arxiv.org/html/2410.24164v1"},
+  {id:28, name:"Tool Use", category:"Object Manipulation", subcategory:"Tool Use", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","1X Technologies","DeepMind","Google RT-2"],
+   description:"Grasp and use tools like sponges, brushes, spatulas, scissors for intended purpose",
+   firstDemo:"2023", trl:6, tags:["tool-use","semantic"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  // Household & Living
+  {id:29, name:"Room Cleanup", category:"Household & Living", subcategory:"Cleaning", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","1X Technologies"],
+   description:"π0.5 cleans up an entirely new kitchen or bedroom — open-world generalization demo",
+   firstDemo:"2025", trl:6, tags:["long-horizon","semantic","mobile"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  {id:30, name:"Making Bed", category:"Household & Living", subcategory:"Bedroom", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["1X Technologies","Toyota Research"],
+   description:"Pull sheets tight, tuck in corners, fluff pillows — highly deformable, long-horizon",
+   firstDemo:"2025", trl:4, tags:["deformable","long-horizon","bimanual"],
+   sourceUrl:null},
+  {id:31, name:"Vacuuming", category:"Household & Living", subcategory:"Cleaning", status:"demonstrated",
+   difficulty:2, dexterityRequired:"low", companies:["iRobot (Roomba)","Samsung Bot Handy"],
+   description:"Navigate and vacuum a floor autonomously — well-solved for flat floors",
+   firstDemo:"2002", trl:9, tags:["mobile","autonomous"],
+   sourceUrl:null},
+  {id:32, name:"Surface Wiping & Cleaning", category:"Household & Living", subcategory:"Cleaning", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Physical Intelligence","1X Technologies"],
+   description:"Wipe down countertops, tables, and surfaces with a cloth",
+   firstDemo:"2024", trl:6, tags:["tool-use","semantic"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  {id:33, name:"Trash Collection", category:"Household & Living", subcategory:"Cleaning", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["1X Technologies","Apptronik"],
+   description:"Find and collect trash items, carry to bin",
+   firstDemo:"2025", trl:5, tags:["mobile","semantic","navigation"],
+   sourceUrl:null},
+  {id:34, name:"Grocery Stowing", category:"Household & Living", subcategory:"Organization", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["1X Technologies"],
+   description:"Unpack groceries and put them away in correct locations",
+   firstDemo:"2025", trl:5, tags:["long-horizon","semantic","manipulation"],
+   sourceUrl:null},
+  // Logistics & Warehousing
+  {id:35, name:"Package Handling", category:"Logistics & Warehousing", subcategory:"Fulfillment", status:"demonstrated",
+   difficulty:2, dexterityRequired:"low", companies:["Agility Robotics","Boston Dynamics Stretch","Figure AI","Amazon Robotics"],
+   description:"Agility Digit at Amazon fulfillment — move packages from bins to conveyor",
+   firstDemo:"2021", trl:8, tags:["industrial","logistics"],
+   sourceUrl:"https://businessinsider.com/humanoid-robot-companies-us-tesla-figure-1x-agility-apptronik-2025-11"},
+  {id:36, name:"Pallet Handling", category:"Logistics & Warehousing", subcategory:"Heavy Logistics", status:"demonstrated",
+   difficulty:2, dexterityRequired:"low", companies:["Boston Dynamics Stretch","Mujin","Dematic"],
+   description:"Move and stack pallets, handle bulk shipments",
+   firstDemo:"2021", trl:8, tags:["industrial","heavy","logistics"],
+   sourceUrl:null},
+  {id:37, name:"Kitting & Order Fulfillment", category:"Logistics & Warehousing", subcategory:"Fulfillment", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Covariant","Ambi Robotics","RightHand Robotics"],
+   description:"Pick items from shelves and kit them into order boxes",
+   firstDemo:"2020", trl:7, tags:["industrial","sorting","pick-place"],
+   sourceUrl:null},
+  {id:38, name:"Last-Mile Delivery", category:"Logistics & Warehousing", subcategory:"Delivery", status:"demonstrated",
+   difficulty:2, dexterityRequired:"low", companies:["Starship","Nuro","Serve Robotics"],
+   description:"Autonomous ground delivery of packages to destination",
+   firstDemo:"2018", trl:8, tags:["mobile","outdoor","autonomous"],
+   sourceUrl:null},
+  // Bimanual & Dexterous
+  {id:39, name:"Bimanual Coordination", category:"Bimanual & Dexterous", subcategory:"Coordination", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Physical Intelligence","Dyna Robotics","Aloha 2 Platform","UC Berkeley"],
+   description:"Tasks requiring two arms to work in coordination — holding while the other arm acts",
+   firstDemo:"2023", trl:6, tags:["bimanual","coordination","research"],
+   sourceUrl:"https://stargen-taxonomy.github.io/"},
+  {id:40, name:"In-Hand Manipulation", category:"Bimanual & Dexterous", subcategory:"Dexterous", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Dexterous Robotics","OpenAI Dactyl (hist.)","Shadow Robot"],
+   description:"Reorient and manipulate objects within the hand without setting them down",
+   firstDemo:"2019", trl:4, tags:["dexterous","research","in-hand"],
+   sourceUrl:null},
+  {id:41, name:"Chopstick Use", category:"Bimanual & Dexterous", subcategory:"Extreme Dexterity", status:"demonstrated",
+   difficulty:5, dexterityRequired:"extreme", companies:["Dexterous Robotics","NUS","ETH Zurich"],
+   description:"Use chopsticks to pick up food items — requires millimeter precision",
+   firstDemo:"2024", trl:3, tags:["dexterous","extreme-precision"],
+   sourceUrl:null},
+  {id:42, name:"Pen/Instrument Handling", category:"Bimanual & Dexterous", subcategory:"Precision", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","DeepMind"],
+   description:"Grasp and use a pen, stylus, or surgical instrument correctly by shaft",
+   firstDemo:"2024", trl:5, tags:["tool-use","precision"],
+   sourceUrl:null},
+  // Mobile Manipulation
+  {id:43, name:"Navigation + Manipulation", category:"Mobile Manipulation", subcategory:"Combined", status:"demonstrated",
+   difficulty:4, dexterityRequired:"high", companies:["Physical Intelligence","1X Technologies","Boston Dynamics","Hello Robot"],
+   description:"Move through space and manipulate objects — combines locomotion and dexterity",
+   firstDemo:"2024", trl:6, tags:["mobile","long-horizon","semantic"],
+   sourceUrl:"https://pi.website/blog/pi05"},
+  {id:44, name:"Open/Close Doors", category:"Mobile Manipulation", subcategory:"Navigation", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Boston Dynamics Spot","1X Technologies","Figure AI"],
+   description:"Open and close doors of various types (push, pull, lever, round knob)",
+   firstDemo:"2018", trl:7, tags:["mobile","manipulation","navigation"],
+   sourceUrl:null},
+  {id:45, name:"Elevator Operation", category:"Mobile Manipulation", subcategory:"Navigation", status:"demonstrated",
+   difficulty:3, dexterityRequired:"medium", companies:["Boston Dynamics","1X Technologies"],
+   description:"Call elevator, press floor button, navigate inside",
+   firstDemo:"2022", trl:5, tags:["mobile","semantic","button-press"],
+   sourceUrl:null},
+  {id:46, name:"Stair Climbing", category:"Mobile Manipulation", subcategory:"Locomotion", status:"demonstrated",
+   difficulty:3, dexterityRequired:"low", companies:["Boston Dynamics Atlas","Agility Digit","Unitree G1","Figure AI"],
+   description:"Climb up and down stairs reliably",
+   firstDemo:"2020", trl:7, tags:["locomotion","mobile"],
+   sourceUrl:null},
+
+  // ── NEAR-TERM ─────────────────────────────────────────────────────────
+  {id:47, name:"Full Meal Cooking", category:"Kitchen & Food", subcategory:"Cooking", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Cook a complete meal including using stove, oven, multiple utensils — requires full kitchen operation",
+   firstDemo:null, trl:3, tags:["long-horizon","semantic","bimanual","heat-hazard"],
+   sourceUrl:null},
+  {id:48, name:"Dishwasher Unloading", category:"Kitchen & Food", subcategory:"Cleanup", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["1X Technologies (in progress)"],
+   description:"Unload clean dishes and put them away in correct cabinets",
+   firstDemo:null, trl:4, tags:["bimanual","semantic","long-horizon"],
+   sourceUrl:null},
+  {id:49, name:"Coffee/Tea Making", category:"Kitchen & Food", subcategory:"Beverages", status:"near-term",
+   difficulty:3, dexterityRequired:"high", companies:["1X Technologies","Bear Robotics"],
+   description:"Operate coffee machine, froth milk, pour — liquid handling challenges",
+   firstDemo:null, trl:5, tags:["sequential","precision","liquid-handling"],
+   sourceUrl:null},
+  {id:50, name:"Fruit Picking (Indoor)", category:"Kitchen & Food", subcategory:"Food Handling", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["Apptronik (in progress)"],
+   description:"Pick ripe fruit without bruising — force-controlled, ripeness detection",
+   firstDemo:null, trl:4, tags:["fragile","force-control","perception"],
+   sourceUrl:null},
+  {id:51, name:"Food Plating", category:"Kitchen & Food", subcategory:"Cooking", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["Bear Robotics","Maidbot"],
+   description:"Plate food items attractively — requires aesthetic judgment and precision placement",
+   firstDemo:null, trl:4, tags:["precision","aesthetic","bimanual"],
+   sourceUrl:null},
+  {id:52, name:"Ironing Clothes", category:"Textile & Soft Materials", subcategory:"Laundry", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Iron wrinkles from clothing — deformable object + hot tool + constant repositioning",
+   firstDemo:null, trl:3, tags:["deformable","heat-hazard","bimanual"],
+   sourceUrl:null},
+  {id:53, name:"Fitted Sheet Folding", category:"Textile & Soft Materials", subcategory:"Laundry", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"The hardest household task for humans too — fold a fitted sheet neatly",
+   firstDemo:null, trl:2, tags:["deformable","bimanual","notoriously-hard"],
+   sourceUrl:null},
+  {id:54, name:"Toilet Cleaning", category:"Household & Living", subcategory:"Cleaning", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["1X Technologies (target)","Matic"],
+   description:"Clean toilet with brush and cleaner — confined space manipulation + hygiene protocols",
+   firstDemo:null, trl:3, tags:["hygiene","tool-use","confined-space"],
+   sourceUrl:null},
+  {id:55, name:"Fixing Household Items", category:"Household & Living", subcategory:"Repair", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Tighten loose screws, replace light bulbs, fix basic household items",
+   firstDemo:null, trl:2, tags:["tool-use","diagnostic","repair"],
+   sourceUrl:null},
+  {id:56, name:"Plant Watering", category:"Household & Living", subcategory:"Care", status:"near-term",
+   difficulty:2, dexterityRequired:"medium", companies:["1X Technologies"],
+   description:"Navigate to plants, pour measured water amount without spilling",
+   firstDemo:null, trl:5, tags:["liquid-handling","navigation","gentle"],
+   sourceUrl:null},
+  {id:57, name:"Laundry Loading", category:"Textile & Soft Materials", subcategory:"Laundry", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["1X Technologies","Toyota Research"],
+   description:"Pick up clothes, load into washing machine, add detergent, start cycle",
+   firstDemo:null, trl:4, tags:["deformable","long-horizon","bimanual"],
+   sourceUrl:null},
+  {id:58, name:"IKEA Furniture Assembly", category:"Assembly & Manufacturing", subcategory:"Assembly", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:["ETH Zurich (research)"],
+   description:"Assemble flat-pack furniture following instructions — spatial reasoning + bimanual + tools",
+   firstDemo:null, trl:3, tags:["long-horizon","bimanual","tool-use","precision"],
+   sourceUrl:null},
+  {id:59, name:"Welding", category:"Assembly & Manufacturing", subcategory:"Industrial", status:"near-term",
+   difficulty:3, dexterityRequired:"medium", companies:["Hirebotics","Universal Robots"],
+   description:"Perform MIG/TIG welds with a robot arm — path planning + quality monitoring",
+   firstDemo:null, trl:6, tags:["tool-use","industrial","precision","hazard"],
+   sourceUrl:null},
+  {id:60, name:"Painting/Coating", category:"Assembly & Manufacturing", subcategory:"Industrial", status:"near-term",
+   difficulty:3, dexterityRequired:"medium", companies:["ABB","FANUC","Kawasaki"],
+   description:"Apply paint or coating uniformly to complex surfaces",
+   firstDemo:null, trl:7, tags:["tool-use","industrial","coverage"],
+   sourceUrl:null},
+  {id:61, name:"Quality Inspection", category:"Assembly & Manufacturing", subcategory:"QC", status:"near-term",
+   difficulty:3, dexterityRequired:"low", companies:["Covariant","Mujin","Cognex"],
+   description:"Inspect parts for defects using vision — detect cracks, misalignment, color issues",
+   firstDemo:null, trl:7, tags:["vision","industrial","QC"],
+   sourceUrl:null},
+  {id:62, name:"Medication Dispensing", category:"Healthcare", subcategory:"Clinical", status:"near-term",
+   difficulty:3, dexterityRequired:"medium", companies:["Diligent Robotics Moxi"],
+   description:"Retrieve and deliver correct medication doses in clinical settings",
+   firstDemo:null, trl:5, tags:["healthcare","precision","safety-critical"],
+   sourceUrl:null},
+  {id:63, name:"Serving Food & Drinks", category:"Household & Living", subcategory:"Service", status:"near-term",
+   difficulty:2, dexterityRequired:"medium", companies:["Bear Robotics Servi","Keenon"],
+   description:"Navigate restaurant, deliver food/drinks to tables",
+   firstDemo:null, trl:7, tags:["service","mobile","social"],
+   sourceUrl:null},
+  {id:64, name:"Assisted Dressing", category:"Care", subcategory:"Personal Care", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:["Georgia Tech (research)"],
+   description:"Help a person put on or remove a garment — human-robot physical contact + compliance",
+   firstDemo:null, trl:2, tags:["care","physical-contact","safety-critical","deformable"],
+   sourceUrl:null},
+  {id:65, name:"Object Retrieval on Request", category:"Mobile Manipulation", subcategory:"Language Following", status:"near-term",
+   difficulty:3, dexterityRequired:"medium", companies:["Hello Robot","1X Technologies","Physical Intelligence"],
+   description:"User asks robot to fetch something from another room — language following + navigation",
+   firstDemo:null, trl:5, tags:["language-instruction","mobile","semantic"],
+   sourceUrl:null},
+  // More near-term tasks
+  {id:80, name:"Window Cleaning", category:"Household & Living", subcategory:"Cleaning", status:"near-term",
+   difficulty:3, dexterityRequired:"medium", companies:["Ecovacs","SkyPro"],
+   description:"Clean windows inside or outside without streaks — requires consistent pressure and coverage",
+   firstDemo:null, trl:4, tags:["tool-use","coverage","mobile"],
+   sourceUrl:null},
+  {id:81, name:"Outdoor Lawn Mowing", category:"Household & Living", subcategory:"Outdoor", status:"near-term",
+   difficulty:2, dexterityRequired:"low", companies:["Husqvarna Automower","Honda Miimo"],
+   description:"Autonomously mow lawn with obstacle avoidance and boundary detection",
+   firstDemo:null, trl:8, tags:["outdoor","autonomous","mobile"],
+   sourceUrl:null},
+  {id:82, name:"Warehouse Inventory Counting", category:"Logistics & Warehousing", subcategory:"Inspection", status:"near-term",
+   difficulty:2, dexterityRequired:"low", companies:["Gather AI","Corvus One"],
+   description:"Autonomously scan shelves and count/verify inventory using vision",
+   firstDemo:null, trl:7, tags:["vision","inspection","mobile","autonomous"],
+   sourceUrl:null},
+  {id:83, name:"Cable Management", category:"Assembly & Manufacturing", subcategory:"Electronics", status:"near-term",
+   difficulty:5, dexterityRequired:"extreme", companies:["Toyota Research","MIT"],
+   description:"Route, bundle, and connect cables — highly deformable with spatial constraints",
+   firstDemo:null, trl:3, tags:["deformable","precision","bimanual"],
+   sourceUrl:null},
+  {id:84, name:"Bathroom Cleaning", category:"Household & Living", subcategory:"Cleaning", status:"near-term",
+   difficulty:4, dexterityRequired:"high", companies:["Maidbot","1X Technologies (target)"],
+   description:"Scrub sink, wipe mirrors, clean floor — full bathroom cleaning sequence",
+   firstDemo:null, trl:3, tags:["tool-use","long-horizon","confined-space"],
+   sourceUrl:null},
+
+  // ── FUTURE ────────────────────────────────────────────────────────────
+  {id:66, name:"Surgical Assistance", category:"Healthcare", subcategory:"Surgery", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Assist surgeon with instrument passing, retraction, suturing — requires extreme reliability",
+   firstDemo:null, trl:2, tags:["safety-critical","precision","human-contact","medical"],
+   sourceUrl:null},
+  {id:67, name:"Outdoor Crop Harvesting", category:"Agriculture", subcategory:"Harvesting", status:"future",
+   difficulty:4, dexterityRequired:"high", companies:["Abundant Robotics (closed)","FFRobotics"],
+   description:"Harvest fruit/vegetables at scale in variable outdoor conditions",
+   firstDemo:null, trl:4, tags:["outdoor","precision","agriculture","scale"],
+   sourceUrl:null},
+  {id:68, name:"Construction Bricklaying", category:"Construction", subcategory:"Masonry", status:"future",
+   difficulty:3, dexterityRequired:"low", companies:["Fastbrick Robotics","Construction Robotics SAM"],
+   description:"Lay bricks autonomously with mortar — position accuracy + heavy payloads",
+   firstDemo:null, trl:5, tags:["outdoor","heavy","industrial","construction"],
+   sourceUrl:null},
+  {id:69, name:"Childcare Assistance", category:"Care", subcategory:"Child Care", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Assist with childcare tasks — safety and social understanding paramount",
+   firstDemo:null, trl:1, tags:["safety-critical","social","care","long-horizon"],
+   sourceUrl:null},
+  {id:70, name:"Emergency Response", category:"Safety", subcategory:"Disaster Response", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["DARPA CHIMP (hist.)","Boston Dynamics"],
+   description:"Navigate disaster sites, rescue victims, operate valves and tools in emergency scenarios",
+   firstDemo:null, trl:2, tags:["outdoor","unstructured","safety-critical","mobile"],
+   sourceUrl:null},
+  {id:71, name:"Deep Sea Maintenance", category:"Extreme Environments", subcategory:"Subsea", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["Oceaneering","Blue Robotics"],
+   description:"Maintain subsea infrastructure (oil, cables) at depth — zero human access",
+   firstDemo:null, trl:3, tags:["extreme-environment","tool-use","remote"],
+   sourceUrl:null},
+  {id:72, name:"Space Maintenance", category:"Extreme Environments", subcategory:"Space", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["NASA Robonaut (hist.)","JAXA"],
+   description:"Maintain equipment on ISS or lunar surface — microgravity, vacuum, latency",
+   firstDemo:null, trl:3, tags:["extreme-environment","precision","remote"],
+   sourceUrl:null},
+  {id:73, name:"Autonomous Full Meal Prep", category:"Kitchen & Food", subcategory:"Cooking", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Prepare a full meal including all prep, cooking, and plating with zero human intervention",
+   firstDemo:null, trl:2, tags:["long-horizon","semantic","safety-critical","liquid","heat"],
+   sourceUrl:null},
+  {id:74, name:"Elderly Care", category:"Care", subcategory:"Elder Care", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:[],
+   description:"Provide cognitive and physical support for elderly — social intelligence + care + mobility",
+   firstDemo:null, trl:1, tags:["care","social","long-horizon","safety-critical"],
+   sourceUrl:null},
+  {id:75, name:"Autonomous Lab Research", category:"Science", subcategory:"Wet Lab", status:"future",
+   difficulty:4, dexterityRequired:"high", companies:["Emerald Cloud Lab","Arctoris"],
+   description:"Perform wet lab experiments autonomously — pipetting, centrifuging, sample prep",
+   firstDemo:null, trl:4, tags:["precision","science","autonomous","liquid-handling"],
+   sourceUrl:null},
+  {id:76, name:"Firefighting Support", category:"Safety", subcategory:"Fire Response", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["Howe & Howe","Thermite"],
+   description:"Enter burning structures, deploy hoses, rescue occupants — extreme heat + danger",
+   firstDemo:null, trl:2, tags:["extreme-environment","safety-critical","mobile","tool-use"],
+   sourceUrl:null},
+  {id:77, name:"Precision Agriculture Planting", category:"Agriculture", subcategory:"Planting", status:"future",
+   difficulty:3, dexterityRequired:"medium", companies:["Blue River Technology","FarmWise"],
+   description:"Plant seeds at precise depth and spacing across fields at scale",
+   firstDemo:null, trl:5, tags:["outdoor","agriculture","precision","mobile"],
+   sourceUrl:null},
+  {id:78, name:"Nuclear Facility Maintenance", category:"Extreme Environments", subcategory:"Nuclear", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["Veolia","ONR"],
+   description:"Maintain nuclear facilities in radioactive zones — zero human access",
+   firstDemo:null, trl:3, tags:["extreme-environment","safety-critical","remote","tool-use"],
+   sourceUrl:null},
+  {id:79, name:"Home Construction", category:"Construction", subcategory:"Building", status:"future",
+   difficulty:4, dexterityRequired:"medium", companies:["Apis Cor","ICON"],
+   description:"Autonomously frame, wire, and finish interior spaces — full construction workflow",
+   firstDemo:null, trl:3, tags:["construction","long-horizon","tool-use","heavy"],
+   sourceUrl:null},
+  {id:85, name:"Robotic Surgery", category:"Healthcare", subcategory:"Surgery", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["Intuitive Surgical (semi-auto)"],
+   description:"Fully autonomous surgical procedure — extreme precision, life-critical",
+   firstDemo:null, trl:2, tags:["safety-critical","precision","medical","autonomous"],
+   sourceUrl:null},
+  {id:86, name:"Personal Shopping Assistant", category:"Mobile Manipulation", subcategory:"Service", status:"future",
+   difficulty:4, dexterityRequired:"high", companies:[],
+   description:"Navigate store, select items from shelves, check out autonomously",
+   firstDemo:null, trl:3, tags:["mobile","semantic","language-instruction","outdoor"],
+   sourceUrl:null},
+  {id:87, name:"Elderly Bathing Assist", category:"Care", subcategory:"Personal Care", status:"future",
+   difficulty:5, dexterityRequired:"extreme", companies:["RIKEN (research)"],
+   description:"Assist with bathing and hygiene — requires gentle force control + social sensitivity",
+   firstDemo:null, trl:2, tags:["care","physical-contact","safety-critical","hygiene"],
+   sourceUrl:null},
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let activeStatus = 'all';
+let activeCategories = new Set(Object.keys(CATEGORY_COLORS));
+let searchQuery = '';
+let selectedTask = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const demonstrated = TASKS.filter(t => t.status === 'demonstrated');
+  const nearTerm = TASKS.filter(t => t.status === 'near-term');
+  const future = TASKS.filter(t => t.status === 'future');
+  const allCompanies = new Set(TASKS.flatMap(t => t.companies));
+  const allCategories = new Set(TASKS.map(t => t.category));
+
+  document.getElementById('stat-total').textContent = TASKS.length;
+  document.getElementById('stat-demonstrated').textContent = demonstrated.length;
+  document.getElementById('stat-pct').textContent = Math.round(demonstrated.length / TASKS.length * 100) + '%';
+  document.getElementById('stat-nearterm').textContent = nearTerm.length;
+  document.getElementById('stat-future').textContent = future.length;
+  document.getElementById('stat-companies').textContent = allCompanies.size;
+  document.getElementById('stat-categories').textContent = allCategories.size;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category chips
+// ─────────────────────────────────────────────────────────────────────────────
+function buildCategoryChips() {
+  const container = document.getElementById('category-filters');
+  container.innerHTML = '';
+  const categories = [...new Set(TASKS.map(t => t.category))];
+
+  const allBtn = document.createElement('button');
+  allBtn.className = 'filter-btn active';
+  allBtn.id = 'cat-all-btn';
+  allBtn.textContent = 'All Categories';
+  allBtn.style.fontSize = '11px';
+  allBtn.addEventListener('click', () => {
+    activeCategories = new Set(Object.keys(CATEGORY_COLORS));
+    document.querySelectorAll('.cat-chip').forEach(c => c.classList.add('active'));
+    updateTreemap();
+  });
+  container.appendChild(allBtn);
+
+  categories.forEach(cat => {
+    const color = CATEGORY_COLORS[cat] || '#888';
+    const chip = document.createElement('button');
+    chip.className = 'cat-chip active';
+    chip.dataset.cat = cat;
+    chip.textContent = cat;
+    chip.style.background = color + '20';
+    chip.style.color = color;
+    chip.style.borderColor = color + '40';
+    chip.addEventListener('click', () => {
+      if (activeCategories.has(cat)) {
+        activeCategories.delete(cat);
+        chip.classList.remove('active');
+      } else {
+        activeCategories.add(cat);
+        chip.classList.add('active');
+      }
+      updateTreemap();
+    });
+    container.appendChild(chip);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Treemap
+// ─────────────────────────────────────────────────────────────────────────────
+function getFilteredTasks() {
+  return TASKS.filter(t => {
+    const matchStatus = activeStatus === 'all' || t.status === activeStatus;
+    const matchCat = activeCategories.has(t.category);
+    const matchSearch = !searchQuery || t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchStatus && matchCat && matchSearch;
+  });
+}
+
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(event, task) {
+  const statusClass = 'badge-' + task.status.replace('-', '-');
+  const badgeClass = task.status === 'demonstrated' ? 'badge-demonstrated' :
+                     task.status === 'near-term' ? 'badge-near-term' : 'badge-future';
+  const statusLabel = task.status === 'demonstrated' ? 'Demonstrated' :
+                      task.status === 'near-term' ? 'Near-Term' : 'Future';
+  tooltip.innerHTML = `
+    <div class="tt-name">${task.name}</div>
+    <div class="tt-row">
+      <span>${task.category}</span>
+      <span class="tt-badge ${badgeClass}">${statusLabel}</span>
+    </div>
+    <div class="tt-row">
+      <span>${task.companies.length} compan${task.companies.length !== 1 ? 'ies' : 'y'}</span>
+      <span>TRL ${task.trl}</span>
+    </div>
+  `;
+  tooltip.classList.add('visible');
+  moveTooltip(event);
+}
+
+function moveTooltip(event) {
+  const x = event.clientX + 14;
+  const y = event.clientY - 10;
+  const tw = tooltip.offsetWidth;
+  const th = tooltip.offsetHeight;
+  const wx = window.innerWidth;
+  const wy = window.innerHeight;
+  tooltip.style.left = (x + tw > wx ? event.clientX - tw - 14 : x) + 'px';
+  tooltip.style.top = (y + th > wy ? event.clientY - th : y) + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+function updateTreemap() {
+  const filtered = getFilteredTasks();
+  const emptyState = document.getElementById('empty-state');
+
+  if (filtered.length === 0) {
+    emptyState.classList.add('visible');
+    d3.select('#treemap-svg').selectAll('*').remove();
+    return;
+  }
+  emptyState.classList.remove('visible');
+
+  const container = document.getElementById('treemap-container');
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  const svg = d3.select('#treemap-svg')
+    .attr('width', W)
+    .attr('height', H);
+  svg.selectAll('*').remove();
+
+  // Build hierarchy: root → categories → tasks
+  const grouped = d3.group(filtered, d => d.category);
+  const rootData = {
+    name: 'root',
+    children: Array.from(grouped, ([cat, tasks]) => ({
+      name: cat,
+      children: tasks.map(t => ({
+        name: t.name,
+        value: t.companies.length + 1,
+        task: t,
+        category: cat
+      }))
+    }))
+  };
+
+  const root = d3.hierarchy(rootData)
+    .sum(d => d.value)
+    .sort((a, b) => b.value - a.value);
+
+  d3.treemap()
+    .tile(d3.treemapSquarify)
+    .size([W - 2, H - 2])
+    .paddingOuter(5)
+    .paddingTop(24)
+    .paddingInner(2)
+    (root);
+
+  // Draw category parent rects (background label area)
+  root.children.forEach(catNode => {
+    const color = CATEGORY_COLORS[catNode.data.name] || '#888';
+    svg.append('rect')
+      .attr('x', catNode.x0)
+      .attr('y', catNode.y0)
+      .attr('width', catNode.x1 - catNode.x0)
+      .attr('height', catNode.y1 - catNode.y0)
+      .attr('fill', color + '08')
+      .attr('stroke', color + '20')
+      .attr('stroke-width', 1)
+      .attr('rx', 3);
+
+    const catW = catNode.x1 - catNode.x0;
+    const catH = catNode.y1 - catNode.y0;
+    if (catW > 60 && catH > 24) {
+      // Use a clipPath per category so text never bleeds outside its box
+      const clipId = 'clip-cat-' + catNode.data.name.replace(/\W+/g, '-');
+      svg.append('clipPath').attr('id', clipId)
+        .append('rect')
+          .attr('x', catNode.x0).attr('y', catNode.y0)
+          .attr('width', catW - 4).attr('height', 20);
+      svg.append('text')
+        .attr('x', catNode.x0 + 6)
+        .attr('y', catNode.y0 + 15)
+        .attr('class', 'category-label')
+        .attr('clip-path', `url(#${clipId})`)
+        .style('fill', color)
+        .style('opacity', 0.7)
+        .text(catNode.data.name.toUpperCase());
+    }
+  });
+
+  // Draw leaf cells
+  const leaves = root.leaves();
+  const cell = svg.selectAll('.cell')
+    .data(leaves)
+    .join('g')
+    .attr('class', d => {
+      const filtered = (activeStatus !== 'all' && d.data.task.status !== activeStatus) ||
+                       !activeCategories.has(d.data.task.category);
+      return 'cell' + (filtered ? ' filtered-out' : '');
+    })
+    .attr('transform', d => `translate(${d.x0},${d.y0})`);
+
+  const color = CATEGORY_COLORS;
+
+  cell.append('rect')
+    .attr('width', d => Math.max(0, d.x1 - d.x0))
+    .attr('height', d => Math.max(0, d.y1 - d.y0))
+    .attr('rx', 2)
+    .attr('class', d => `status-${d.data.task.status}`)
+    .attr('fill', d => {
+      const c = CATEGORY_COLORS[d.data.category] || '#888';
+      return c + '18';
+    })
+    .attr('stroke', d => {
+      const c = CATEGORY_COLORS[d.data.category] || '#888';
+      if (d.data.task.status === 'demonstrated') return c;
+      if (d.data.task.status === 'near-term') return c + '99';
+      return '#555';
+    })
+    .style('stroke-dasharray', d => {
+      if (d.data.task.status === 'near-term') return '5,3';
+      if (d.data.task.status === 'future') return '2,4';
+      return 'none';
+    })
+    .style('filter', d => {
+      if (d.data.task.status === 'demonstrated') {
+        const c = CATEGORY_COLORS[d.data.category] || '#888';
+        return `drop-shadow(0 0 3px ${c}80)`;
+      }
+      return 'none';
+    });
+
+  // Task name labels — clip to cell so text never bleeds
+  cell.each(function(d) {
+    const w = d.x1 - d.x0;
+    const h = d.y1 - d.y0;
+    if (w < 28 || h < 16) return;
+
+    const g = d3.select(this);
+    const taskName = d.data.task.name;
+    const fontSize = Math.min(12, Math.max(8, Math.min(w / 8, h / 3)));
+    const lineH = fontSize + 2;
+    const maxLines = Math.floor((h - 8) / lineH);
+    if (maxLines < 1) return;
+
+    const lines = wrapText(taskName, w - 10);
+    const visibleLines = lines.slice(0, maxLines);
+
+    // Add clipPath so text is strictly contained
+    const clipId = 'clip-cell-' + d.data.task.id;
+    g.append('clipPath').attr('id', clipId)
+      .append('rect').attr('width', w).attr('height', h);
+
+    const totalTextH = visibleLines.length * lineH;
+    const startY = Math.max(fontSize, (h - totalTextH) / 2 + fontSize);
+
+    visibleLines.forEach((line, i) => {
+      g.append('text')
+        .attr('x', w / 2)
+        .attr('y', startY + i * lineH)
+        .attr('text-anchor', 'middle')
+        .attr('clip-path', `url(#${clipId})`)
+        .attr('font-size', fontSize)
+        .attr('fill', 'rgba(255,255,255,0.88)')
+        .attr('font-weight', '500')
+        .text(line);
+    });
+  });
+
+  // Events
+  cell
+    .on('mouseenter', function(event, d) {
+      showTooltip(event, d.data.task);
+      d3.select(this).select('rect').style('opacity', 0.9);
+    })
+    .on('mousemove', moveTooltip)
+    .on('mouseleave', function() {
+      hideTooltip();
+      d3.select(this).select('rect').style('opacity', null);
+    })
+    .on('click', function(event, d) {
+      openPanel(d.data.task);
+    });
+}
+
+function wrapText(text, maxWidth) {
+  const words = text.split(/\s+/);
+  const approxCharWidth = 6.5;
+  const lines = [];
+  let current = '';
+  for (const w of words) {
+    const test = current ? current + ' ' + w : w;
+    if (test.length * approxCharWidth > maxWidth && current) {
+      lines.push(current);
+      current = w;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Side panel
+// ─────────────────────────────────────────────────────────────────────────────
+function openPanel(task) {
+  selectedTask = task;
+  const panel = document.getElementById('side-panel');
+
+  document.getElementById('panel-task-name').textContent = task.name;
+  document.getElementById('panel-category').textContent = '📁 ' + task.category + (task.subcategory ? ' › ' + task.subcategory : '');
+
+  const badgeClass = task.status === 'demonstrated' ? 'badge-demonstrated' :
+                     task.status === 'near-term' ? 'badge-near-term' : 'badge-future';
+  const statusLabel = task.status === 'demonstrated' ? '✅ Demonstrated' :
+                      task.status === 'near-term' ? '🔬 Near-Term' : '🔭 Future';
+  document.getElementById('panel-status').innerHTML = `<span class="tt-badge ${badgeClass}" style="font-size:12px;padding:4px 10px">${statusLabel}</span>`;
+
+  const diffEl = document.getElementById('panel-difficulty');
+  diffEl.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'diff-dot ' + (i <= task.difficulty ? 'filled' : 'empty');
+    diffEl.appendChild(dot);
+  }
+  const dexLabels = {low:'🤏 Low', medium:'✋ Medium', high:'💪 High', extreme:'🖐️ Extreme'};
+  document.getElementById('panel-dexterity').textContent = dexLabels[task.dexterityRequired] || task.dexterityRequired;
+
+  const trlPct = (task.trl / 9 * 100).toFixed(0);
+  document.getElementById('panel-trl-bar').style.width = trlPct + '%';
+  const trlLabels = {1:'Basic research',2:'Tech concept',3:'Proof of concept',4:'Lab validation',5:'Relevant environment',6:'Demonstrated',7:'Prototype complete',8:'Complete & qualified',9:'Operational'};
+  document.getElementById('panel-trl-text').textContent = `TRL ${task.trl}/9 — ${trlLabels[task.trl] || ''}`;
+
+  document.getElementById('panel-desc').textContent = task.description;
+
+  const companiesEl = document.getElementById('panel-companies');
+  companiesEl.innerHTML = '';
+  if (task.companies.length === 0) {
+    companiesEl.innerHTML = '<span style="color:var(--text-muted);font-size:12px">No public demos yet</span>';
+  } else {
+    task.companies.forEach(co => {
+      const pill = document.createElement('span');
+      pill.className = 'company-pill';
+      pill.textContent = co;
+      companiesEl.appendChild(pill);
+    });
+  }
+
+  const tagsEl = document.getElementById('panel-tags');
+  tagsEl.innerHTML = '';
+  task.tags.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.textContent = '#' + tag;
+    tagsEl.appendChild(chip);
+  });
+
+  const demoSection = document.getElementById('panel-demo-section');
+  if (task.firstDemo) {
+    demoSection.style.display = '';
+    document.getElementById('panel-demo').textContent = task.firstDemo;
+  } else {
+    demoSection.style.display = 'none';
+  }
+
+  const sourceSection = document.getElementById('panel-source-section');
+  if (task.sourceUrl) {
+    sourceSection.style.display = '';
+    document.getElementById('panel-source').innerHTML = `<a href="${task.sourceUrl}" target="_blank" rel="noopener">🔗 View source</a>`;
+  } else {
+    sourceSection.style.display = 'none';
+  }
+
+  panel.classList.add('open');
+  // Reflow treemap to account for panel
+  setTimeout(updateTreemap, 310);
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  selectedTask = null;
+  setTimeout(updateTreemap, 310);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event listeners
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  updateTreemap();
+});
+
+document.querySelectorAll('#status-filters .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeStatus = btn.dataset.status;
+    document.querySelectorAll('#status-filters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateTreemap();
+  });
+});
+
+// Resize
+const ro = new ResizeObserver(() => updateTreemap());
+ro.observe(document.getElementById('treemap-container'));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+updateStats();
+buildCategoryChips();
+updateTreemap();
+</script>
+</body>
+</html>
