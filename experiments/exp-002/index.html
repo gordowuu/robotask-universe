@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CosmosPromptForge — Cosmos Transfer 2.5 Prompt Designer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #09090e;
+      --surface:  #0f0f16;
+      --surface2: #16161f;
+      --surface3: #1d1d28;
+      --border:   #1f1f2e;
+      --border2:  #28283a;
+      --text:     #e4e4f0;
+      --muted:    #60607a;
+      --dim:      #404058;
+      --accent:   #8b5cf6;
+      --accent2:  #7c3aed;
+      --cyan:     #22d3ee;
+      --pink:     #f472b6;
+      --green:    #34d399;
+      --amber:    #fbbf24;
+      --radius:   10px;
+    }
+
+    html { font-size: 14px; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(9,9,14,0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #8b5cf6, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+    .logo-sub {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .header-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    .pill-badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--muted);
+    }
+    .pill-badge.hot { color: var(--accent); border-color: #3d2070; background: #1a0f35; }
+
+    /* ── Main layout ── */
+    .main-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 0;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-header h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .panel-header .icon { font-size: 14px; }
+    .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+
+    /* ── Form fields ── */
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .field-hint { font-size: 11px; color: var(--muted); }
+    .field-label .badge-tip {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #1a2a1a;
+      color: var(--green);
+      border: 1px solid #254025;
+      font-weight: 500;
+    }
+
+    input[type=text], textarea, select {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      width: 100%;
+    }
+    input[type=text]:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(139,92,246,0.15);
+    }
+    input[type=text]::placeholder, textarea::placeholder { color: var(--muted); }
+    textarea { resize: vertical; min-height: 72px; }
+    select option { background: #1a1a28; }
+
+    /* ── Chip selectors ── */
+    .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .chip:hover { border-color: var(--dim); color: var(--text); }
+    .chip.selected {
+      background: rgba(139,92,246,0.15);
+      border-color: var(--accent);
+      color: #c4b5fd;
+    }
+    .chip.selected:hover { background: rgba(139,92,246,0.25); }
+
+    /* Category color variants */
+    .chip[data-cat=lighting].selected  { background: rgba(251,191,36,0.12); border-color: var(--amber); color: #fcd34d; }
+    .chip[data-cat=env].selected       { background: rgba(52,211,153,0.12); border-color: var(--green); color: #6ee7b7; }
+    .chip[data-cat=camera].selected    { background: rgba(34,211,238,0.12); border-color: var(--cyan); color: #67e8f9; }
+    .chip[data-cat=style].selected     { background: rgba(244,114,182,0.12); border-color: var(--pink); color: #f9a8d4; }
+    .chip[data-cat=motion].selected    { background: rgba(139,92,246,0.15); border-color: var(--accent); color: #c4b5fd; }
+
+    /* ── Slider field ── */
+    .slider-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+    .slider-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 32px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    input[type=range].param-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border2);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range].param-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+      cursor: pointer;
+    }
+
+    /* ── Output panel ── */
+    .output-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: sticky;
+      top: 88px;
+    }
+
+    .prompt-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .prompt-block-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .prompt-block-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .prompt-block-title .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .copy-btn {
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--dim); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+    .prompt-text {
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 80px;
+    }
+    .prompt-text .t-robot  { color: #67e8f9; }
+    .prompt-text .t-task   { color: #c4b5fd; }
+    .prompt-text .t-aug    { color: #fcd34d; }
+    .prompt-text .t-neg    { color: #fca5a5; }
+    .prompt-text .t-quality{ color: #86efac; }
+
+    /* ── Variation cards ── */
+    .variations-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .var-card {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 9px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .var-card:hover { border-color: var(--accent); background: rgba(139,92,246,0.07); }
+    .var-card-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .var-card-text {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .var-card-apply {
+      position: absolute;
+      top: 8px; right: 8px;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(139,92,246,0.2);
+      color: var(--accent);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .var-card:hover .var-card-apply { opacity: 1; }
+
+    /* ── Config panel ── */
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* ── JSON config output ── */
+    .json-pre {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11.5px;
+      line-height: 1.7;
+      color: #a5b4fc;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── Keyword pills (prompt breakdown) ── */
+    .token-breakdown {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .token {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+    }
+    .token.robot  { background: rgba(34,211,238,0.1);  color: #67e8f9; border-color: rgba(34,211,238,0.2); }
+    .token.task   { background: rgba(139,92,246,0.12); color: #c4b5fd; border-color: rgba(139,92,246,0.2); }
+    .token.aug    { background: rgba(251,191,36,0.1);  color: #fcd34d; border-color: rgba(251,191,36,0.2); }
+    .token.quality{ background: rgba(52,211,153,0.1);  color: #86efac; border-color: rgba(52,211,153,0.2); }
+
+    /* ── Save/load ── */
+    .recipe-list { display: flex; flex-direction: column; gap: 6px; }
+    .recipe-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .recipe-item:hover { border-color: var(--accent); }
+    .recipe-item-name { flex: 1; font-size: 13px; }
+    .recipe-item-meta { font-size: 11px; color: var(--muted); }
+    .recipe-del { font-size: 12px; color: #555; padding: 2px 6px; cursor: pointer; border-radius: 4px; }
+    .recipe-del:hover { background: rgba(240,82,82,0.15); color: var(--red, #f05252); }
+
+    /* ── Actions ── */
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-ghost { background: var(--surface2); border: 1px solid var(--border2); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--dim); }
+
+    @media (max-width: 960px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .output-panel { position: static; }
+    }
+    @media (max-width: 600px) {
+      header { padding: 12px 16px; }
+      .main-grid { padding: 14px; }
+      .variations-grid { grid-template-columns: 1fr; }
+      .config-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div>
+    <div class="logo">CosmosPromptForge</div>
+    <div class="logo-sub">Cosmos Transfer 2.5 · Prompt Designer</div>
+  </div>
+  <div class="header-right">
+    <span class="pill-badge hot">Cosmos Transfer 2.5</span>
+    <span class="pill-badge">No API key needed</span>
+    <button class="btn btn-ghost" onclick="saveRecipe()" style="padding:6px 14px;font-size:12px">💾 Save Recipe</button>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<div class="main-grid">
+
+  <!-- Left: config panel -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Robot context -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">🤖</span>
+        <h2>Robot Context</h2>
+      </div>
+      <div class="panel-body">
+        <div class="field-group">
+          <label class="field-label">Robot Type / Platform</label>
+          <input type="text" id="robot-type" placeholder="e.g. 6-DOF robotic arm, UMI gripper, mobile manipulator…" oninput="generate()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Task Description</label>
+          <input type="text" id="task-desc" placeholder="e.g. pick and place folded sweater into bin" oninput="generate()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Camera Setup</label>
+          <div class="chip-group" id="camera-chips"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Augmentation goals -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">✨</span>
+        <h2>Augmentation Goals</h2>
+      </div>
+      <div class="panel-body">
+        <div class="field-group">
+          <label class="field-label">Lighting Variations <span class="badge-tip">High Impact</span></label>
+          <div class="chip-group" id="lighting-chips"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Environment / Background</label>
+          <div class="chip-group" id="env-chips"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Visual Style</label>
+          <div class="chip-group" id="style-chips"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Motion Characteristics</label>
+          <div class="chip-group" id="motion-chips"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cosmos params -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">⚙️</span>
+        <h2>Cosmos Transfer Params</h2>
+      </div>
+      <div class="panel-body">
+        <div class="config-grid">
+          <div class="field-group">
+            <label class="field-label">Guidance Scale</label>
+            <div class="slider-row">
+              <input type="range" class="param-slider" id="guidance-scale" min="1" max="15" step="0.5" value="7" oninput="updateParam('guidance-scale',this.value);generate()">
+              <span class="slider-val" id="guidance-scale-val">7.0</span>
+            </div>
+            <div class="field-hint">Higher = more prompt adherence</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Temporal Consistency</label>
+            <div class="slider-row">
+              <input type="range" class="param-slider" id="temp-consistency" min="0" max="1" step="0.05" value="0.8" oninput="updateParam('temp-consistency',this.value);generate()">
+              <span class="slider-val" id="temp-consistency-val">0.80</span>
+            </div>
+            <div class="field-hint">0 = free gen, 1 = max consistency</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Source Video Weight</label>
+            <div class="slider-row">
+              <input type="range" class="param-slider" id="source-weight" min="0" max="1" step="0.05" value="0.6" oninput="updateParam('source-weight',this.value);generate()">
+              <span class="slider-val" id="source-weight-val">0.60</span>
+            </div>
+            <div class="field-hint">How much original motion is preserved</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Num Inference Steps</label>
+            <div class="slider-row">
+              <input type="range" class="param-slider" id="num-steps" min="10" max="50" step="5" value="25" oninput="updateParam('num-steps',this.value);generate()">
+              <span class="slider-val" id="num-steps-val">25</span>
+            </div>
+            <div class="field-hint">More steps = quality, slower</div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Model Size</label>
+          <select id="model-size" onchange="generate()">
+            <option value="7B">Cosmos-Transfer2.5-7B (fast, good)</option>
+            <option value="14B" selected>Cosmos-Transfer2.5-14B (recommended)</option>
+            <option value="34B">Cosmos-Transfer2.5-34B (best quality, slow)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Negative prompt -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">🚫</span>
+        <h2>Negative Prompt Additions</h2>
+      </div>
+      <div class="panel-body">
+        <textarea id="neg-extra" placeholder="Optional: add extra negative terms…" oninput="generate()" style="min-height:56px"></textarea>
+        <div class="chip-group" id="neg-chips"></div>
+      </div>
+    </div>
+
+    <!-- Saved recipes -->
+    <div class="panel" id="recipes-panel">
+      <div class="panel-header">
+        <span class="icon">📚</span>
+        <h2>Saved Recipes</h2>
+      </div>
+      <div class="panel-body" id="recipes-body">
+        <div style="color:var(--muted);font-size:12px;text-align:center;padding:8px 0">No saved recipes yet. Build a prompt and click Save Recipe.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: output -->
+  <div class="output-panel">
+
+    <!-- Main prompt output -->
+    <div class="prompt-block">
+      <div class="prompt-block-header">
+        <div class="prompt-block-title">
+          <span class="dot" style="background:#8b5cf6"></span>
+          Positive Prompt
+        </div>
+        <button class="copy-btn" id="copy-pos" onclick="copyPrompt('pos')">Copy</button>
+      </div>
+      <div class="prompt-text" id="pos-prompt-out">Configure your inputs to generate a prompt…</div>
+      <div class="token-breakdown" id="token-breakdown"></div>
+    </div>
+
+    <!-- Negative prompt -->
+    <div class="prompt-block">
+      <div class="prompt-block-header">
+        <div class="prompt-block-title">
+          <span class="dot" style="background:#f05252"></span>
+          Negative Prompt
+        </div>
+        <button class="copy-btn" id="copy-neg" onclick="copyPrompt('neg')">Copy</button>
+      </div>
+      <div class="prompt-text" id="neg-prompt-out" style="font-size:12px;color:var(--muted)">—</div>
+    </div>
+
+    <!-- JSON config -->
+    <div class="prompt-block">
+      <div class="prompt-block-header">
+        <div class="prompt-block-title">
+          <span class="dot" style="background:#22d3ee"></span>
+          Inference Config (JSON)
+        </div>
+        <button class="copy-btn" id="copy-json" onclick="copyPrompt('json')">Copy</button>
+      </div>
+      <pre class="json-pre" id="json-out">{}</pre>
+    </div>
+
+    <!-- Variation suggestions -->
+    <div class="prompt-block">
+      <div class="prompt-block-header">
+        <div class="prompt-block-title">
+          <span class="dot" style="background:#34d399"></span>
+          Variation Ideas
+        </div>
+        <span style="font-size:11px;color:var(--muted)">click to apply</span>
+      </div>
+      <div class="variations-grid" id="variations-grid" style="padding:12px">
+        <div style="color:var(--muted);font-size:12px;grid-column:1/-1;text-align:center;padding:8px 0">Generate a prompt first…</div>
+      </div>
+    </div>
+
+    <!-- CLI command -->
+    <div class="prompt-block">
+      <div class="prompt-block-header">
+        <div class="prompt-block-title">
+          <span class="dot" style="background:#fbbf24"></span>
+          CLI Command
+        </div>
+        <button class="copy-btn" id="copy-cli" onclick="copyPrompt('cli')">Copy</button>
+      </div>
+      <div class="prompt-text" id="cli-out" style="font-size:11.5px;color:#94a3b8">—</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Prompt generation engine ── -->
+<script>
+
+// ── Chip definitions ──
+const CHIPS = {
+  camera: [
+    { id: 'wrist-cam',     label: '🎥 Wrist Cam' },
+    { id: 'overhead',      label: '⬆ Overhead' },
+    { id: 'side-view',     label: '↔ Side View' },
+    { id: 'third-person',  label: '👁 Third-Person' },
+    { id: 'egocentric',    label: '🤖 Egocentric' },
+  ],
+  lighting: [
+    { id: 'bright-daylight',   label: '☀️ Bright Daylight' },
+    { id: 'overcast',          label: '☁️ Overcast' },
+    { id: 'dim-ambient',       label: '🌑 Dim Ambient' },
+    { id: 'harsh-shadows',     label: '🌒 Harsh Shadows' },
+    { id: 'warm-indoor',       label: '🔆 Warm Indoor' },
+    { id: 'cool-fluorescent',  label: '💡 Cool Fluorescent' },
+    { id: 'backlit',           label: '🔆 Backlit' },
+    { id: 'neon-accent',       label: '🟣 Neon Accent' },
+  ],
+  env: [
+    { id: 'industrial-floor',  label: '🏭 Industrial Floor' },
+    { id: 'clean-lab',         label: '🔬 Clean Lab' },
+    { id: 'home-kitchen',      label: '🏠 Home Kitchen' },
+    { id: 'warehouse',         label: '📦 Warehouse' },
+    { id: 'outdoor',           label: '🌿 Outdoor' },
+    { id: 'dark-background',   label: '⬛ Dark BG' },
+    { id: 'cluttered',         label: '📚 Cluttered' },
+    { id: 'minimalist',        label: '⬜ Minimalist' },
+  ],
+  style: [
+    { id: 'photorealistic',    label: '📷 Photorealistic' },
+    { id: 'cinematic',         label: '🎬 Cinematic' },
+    { id: 'high-contrast',     label: '◑ High Contrast' },
+    { id: 'desaturated',       label: '🎞 Desaturated' },
+    { id: 'sharp-4k',          label: '✨ Sharp 4K' },
+    { id: 'bokeh-bg',          label: '🌀 Bokeh BG' },
+    { id: 'documentary',       label: '📹 Documentary' },
+  ],
+  motion: [
+    { id: 'slow-deliberate',   label: '🐢 Slow & Deliberate' },
+    { id: 'fast-precise',      label: '⚡ Fast & Precise' },
+    { id: 'smooth-continuous', label: '〰️ Smooth Continuous' },
+    { id: 'jerky-realistic',   label: '🔀 Slight Jitter' },
+    { id: 'pause-at-grasp',    label: '✋ Pause at Grasp' },
+  ],
+  neg: [
+    { id: 'no-blur',           label: '🚫 Blur' },
+    { id: 'no-artifacts',      label: '🚫 Artifacts' },
+    { id: 'no-distortion',     label: '🚫 Distortion' },
+    { id: 'no-flicker',        label: '🚫 Flicker' },
+    { id: 'no-ghosting',       label: '🚫 Ghosting' },
+    { id: 'no-overexposure',   label: '🚫 Overexposure' },
+  ],
+};
+
+// ── Prompt text maps ──
+const TEXT = {
+  camera: {
+    'wrist-cam':    'wrist-mounted camera perspective',
+    'overhead':     'overhead top-down camera view',
+    'side-view':    'side-view fixed camera',
+    'third-person': 'third-person observer camera angle',
+    'egocentric':   'egocentric first-person robot viewpoint',
+  },
+  lighting: {
+    'bright-daylight':  'bright natural daylight illumination',
+    'overcast':         'soft overcast diffused lighting',
+    'dim-ambient':      'dim low ambient light conditions',
+    'harsh-shadows':    'dramatic harsh shadows, directional light',
+    'warm-indoor':      'warm indoor incandescent lighting',
+    'cool-fluorescent': 'cool fluorescent overhead lighting',
+    'backlit':          'backlit scene with rim lighting on robot',
+    'neon-accent':      'neon accent lighting, vivid color cast',
+  },
+  env: {
+    'industrial-floor': 'industrial factory floor environment',
+    'clean-lab':        'sterile clean laboratory setting',
+    'home-kitchen':     'domestic home kitchen environment',
+    'warehouse':        'warehouse with shelving and storage',
+    'outdoor':          'outdoor environment, natural surroundings',
+    'dark-background':  'dark minimalist background',
+    'cluttered':        'cluttered realistic work surface',
+    'minimalist':       'clean minimalist white background',
+  },
+  style: {
+    'photorealistic':   'photorealistic 4K quality video',
+    'cinematic':        'cinematic color grade, film-like look',
+    'high-contrast':    'high contrast, deep blacks and bright highlights',
+    'desaturated':      'desaturated muted color palette',
+    'sharp-4k':         'ultra sharp 4K high resolution footage',
+    'bokeh-bg':         'shallow depth of field, background bokeh',
+    'documentary':      'documentary-style handheld camera feel',
+  },
+  motion: {
+    'slow-deliberate':   'slow deliberate precise movements',
+    'fast-precise':      'fast rapid precise motions',
+    'smooth-continuous': 'smooth continuous fluid motion',
+    'jerky-realistic':   'natural slight motor jitter, realistic servo motion',
+    'pause-at-grasp':    'brief pause before grasping objects',
+  },
+  negBase: 'blurry, low quality, artifacts, distortion, flickering, ghosting, overexposed, unrealistic physics, floating objects, broken geometry, duplicate frames',
+  negMap: {
+    'no-blur':        'blurry, out of focus, motion blur',
+    'no-artifacts':   'compression artifacts, digital noise, pixelation',
+    'no-distortion':  'lens distortion, warping, barrel distortion',
+    'no-flicker':     'flickering, strobing, temporal inconsistency',
+    'no-ghosting':    'ghosting, double exposure, transparency artifacts',
+    'no-overexposure':'overexposed, blown out highlights, white clipping',
+  },
+};
+
+// ── Build chip UI ──
+function buildChips(containerId, cat) {
+  const container = document.getElementById(containerId);
+  (CHIPS[cat] || []).forEach(chip => {
+    const el = document.createElement('span');
+    el.className = 'chip';
+    el.dataset.cat = cat;
+    el.dataset.id = chip.id;
+    el.textContent = chip.label;
+    el.onclick = () => { el.classList.toggle('selected'); generate(); };
+    container.appendChild(el);
+  });
+}
+
+buildChips('camera-chips',   'camera');
+buildChips('lighting-chips', 'lighting');
+buildChips('env-chips',      'env');
+buildChips('style-chips',    'style');
+buildChips('motion-chips',   'motion');
+buildChips('neg-chips',      'neg');
+
+function getSelected(cat) {
+  return [...document.querySelectorAll(`.chip[data-cat=${cat}].selected`)].map(el => el.dataset.id);
+}
+
+// ── Param display ──
+function updateParam(id, val) {
+  const valEl = document.getElementById(`${id}-val`);
+  if (!valEl) return;
+  const num = parseFloat(val);
+  valEl.textContent = Number.isInteger(num) ? num : num.toFixed(2);
+}
+
+// ── Generate ──
+let lastPrompts = { pos: '', neg: '', json: '', cli: '' };
+
+function generate() {
+  const robotType   = document.getElementById('robot-type').value.trim();
+  const taskDesc    = document.getElementById('task-desc').value.trim();
+  const modelSize   = document.getElementById('model-size').value;
+  const guidanceScale    = parseFloat(document.getElementById('guidance-scale').value);
+  const tempConsistency  = parseFloat(document.getElementById('temp-consistency').value);
+  const sourceWeight     = parseFloat(document.getElementById('source-weight').value);
+  const numSteps         = parseInt(document.getElementById('num-steps').value);
+  const negExtra    = document.getElementById('neg-extra').value.trim();
+
+  const cam     = getSelected('camera');
+  const light   = getSelected('lighting');
+  const env     = getSelected('env');
+  const style   = getSelected('style');
+  const motion  = getSelected('motion');
+  const negSel  = getSelected('neg');
+
+  // ── Build positive prompt ──
+  const parts = [];
+
+  // Robot subject
+  if (robotType) parts.push(`A ${robotType}`);
+  else parts.push('A robotic arm');
+
+  // Task
+  if (taskDesc) parts.push(`performing ${taskDesc}`);
+
+  // Camera
+  if (cam.length)   parts.push(cam.map(c => TEXT.camera[c]).join(', '));
+
+  // Lighting
+  if (light.length) parts.push(light.map(c => TEXT.lighting[c]).join(', '));
+
+  // Environment
+  if (env.length)   parts.push(env.map(c => TEXT.env[c]).join(', '));
+
+  // Style
+  if (style.length) parts.push(style.map(c => TEXT.style[c]).join(', '));
+
+  // Motion
+  if (motion.length) parts.push(motion.map(c => TEXT.motion[c]).join(', '));
+
+  // Quality tail
+  parts.push('high quality, temporally consistent, physically plausible robot motion');
+
+  const posPrompt = parts.join(', ');
+
+  // ── Build negative prompt ──
+  const negParts = [TEXT.negBase];
+  negSel.forEach(id => { if (TEXT.negMap[id]) negParts.push(TEXT.negMap[id]); });
+  if (negExtra) negParts.push(negExtra);
+  const negPrompt = negParts.join(', ');
+
+  // ── Build JSON config ──
+  const config = {
+    model: `Cosmos-Transfer2.5-${modelSize}`,
+    prompt: posPrompt,
+    negative_prompt: negPrompt,
+    guidance_scale: guidanceScale,
+    temporal_consistency: tempConsistency,
+    source_video_weight: sourceWeight,
+    num_inference_steps: numSteps,
+    seed: 42,
+  };
+  const jsonStr = JSON.stringify(config, null, 2);
+
+  // ── Build CLI command ──
+  const cliCmd = `python inference.py \\
+  --model Cosmos-Transfer2.5-${modelSize} \\
+  --prompt "${posPrompt.replace(/"/g, '\\"').substring(0, 80)}…" \\
+  --negative_prompt "${negPrompt.substring(0, 60)}…" \\
+  --guidance_scale ${guidanceScale} \\
+  --temporal_consistency ${tempConsistency} \\
+  --source_video_weight ${sourceWeight} \\
+  --num_inference_steps ${numSteps} \\
+  --seed 42 \\
+  --source_video input.mp4 \\
+  --output augmented_output.mp4`;
+
+  lastPrompts = { pos: posPrompt, neg: negPrompt, json: jsonStr, cli: cliCmd };
+
+  // ── Render positive with highlights ──
+  function hlPos(text) {
+    let h = text;
+    h = h.replace(/(A [\w\s-]+(robotic arm|manipulator|gripper)[^\,]*)/i, '<span class="t-robot">$1</span>');
+    h = h.replace(/(performing [^,]+)/i, '<span class="t-task">$1</span>');
+    if (light.length) {
+      light.forEach(id => {
+        const t = TEXT.lighting[id];
+        if (t) h = h.replace(t, `<span class="t-aug">${t}</span>`);
+      });
+    }
+    if (env.length) {
+      env.forEach(id => {
+        const t = TEXT.env[id];
+        if (t) h = h.replace(t, `<span class="t-aug">${t}</span>`);
+      });
+    }
+    h = h.replace(/(high quality[^<]*)/g, '<span class="t-quality">$1</span>');
+    return h;
+  }
+
+  document.getElementById('pos-prompt-out').innerHTML = hlPos(posPrompt);
+  document.getElementById('neg-prompt-out').textContent = negPrompt;
+  document.getElementById('json-out').textContent = jsonStr;
+  document.getElementById('cli-out').textContent = cliCmd;
+
+  // ── Token breakdown ──
+  const breakdown = document.getElementById('token-breakdown');
+  breakdown.innerHTML = '';
+  const tokens = [
+    ...(robotType ? [{ text: robotType, cls: 'robot' }] : []),
+    ...(taskDesc ? [{ text: taskDesc, cls: 'task' }] : []),
+    ...cam.map(id => ({ text: CHIPS.camera.find(c=>c.id===id)?.label || id, cls: 'task' })),
+    ...light.map(id => ({ text: CHIPS.lighting.find(c=>c.id===id)?.label || id, cls: 'aug' })),
+    ...env.map(id => ({ text: CHIPS.env.find(c=>c.id===id)?.label || id, cls: 'aug' })),
+    ...style.map(id => ({ text: CHIPS.style.find(c=>c.id===id)?.label || id, cls: 'quality' })),
+    ...motion.map(id => ({ text: CHIPS.motion.find(c=>c.id===id)?.label || id, cls: 'task' })),
+  ];
+  tokens.forEach(t => {
+    const span = document.createElement('span');
+    span.className = `token ${t.cls}`;
+    span.textContent = t.text;
+    breakdown.appendChild(span);
+  });
+
+  // ── Generate variations ──
+  generateVariations(robotType, taskDesc, cam, light, env, style, motion);
+}
+
+// ── Variation generator ──
+function generateVariations(robot, task, cam, light, env, style, motion) {
+  const grid = document.getElementById('variations-grid');
+  grid.innerHTML = '';
+
+  const r = robot || 'robotic arm';
+  const t = task || 'manipulation task';
+
+  const variations = [
+    {
+      label: '🌅 Different Time of Day',
+      text: `${r} performing ${t}, golden hour warm sunlight streaming through windows, long shadows, photorealistic, high quality`,
+    },
+    {
+      label: '🌧 Weather / Atmosphere',
+      text: `${r} performing ${t}, dramatic overcast sky, moody diffuse lighting, rain-wet surfaces reflecting light, cinematic`,
+    },
+    {
+      label: '📷 Alternative Viewpoint',
+      text: `${r} performing ${t}, dramatic low-angle worm's-eye view camera, wide angle lens, industrial environment`,
+    },
+    {
+      label: '🎬 Cinematic Grade',
+      text: `${r} performing ${t}, cinematic teal-orange color grade, shallow depth of field, anamorphic lens flares, film grain`,
+    },
+    {
+      label: '🏭 Industrial Context',
+      text: `${r} performing ${t}, factory floor environment, other robots in background, safety yellow markings, harsh overhead sodium lighting`,
+    },
+    {
+      label: '🏠 Domestic / Home Context',
+      text: `${r} performing ${t}, home kitchen setting, wooden countertops, warm interior lighting, everyday household objects`,
+    },
+  ];
+
+  variations.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'var-card';
+    card.innerHTML = `
+      <div class="var-card-label">${v.label}</div>
+      <div class="var-card-text">${v.text.substring(0, 90)}${v.text.length > 90 ? '…' : ''}</div>
+      <span class="var-card-apply">Apply →</span>
+    `;
+    card.onclick = () => {
+      // Apply this variation as the positive prompt override
+      document.getElementById('pos-prompt-out').textContent = v.text;
+      lastPrompts.pos = v.text;
+      showToast(`Applied: ${v.label}`);
+    };
+    grid.appendChild(card);
+  });
+}
+
+// ── Copy ──
+function copyPrompt(which) {
+  const text = lastPrompts[which] || '';
+  if (!text) { showToast('Nothing to copy yet!'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(`copy-${which}`);
+    if (btn) { btn.textContent = '✓ Copied'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600); }
+    showToast('Copied to clipboard!');
+  }).catch(() => { showToast('Copy failed — select text manually'); });
+}
+
+// ── Save / load recipes ──
+const RECIPE_KEY = 'cosmos-prompt-forge:recipes';
+let recipes = JSON.parse(localStorage.getItem(RECIPE_KEY) || '[]');
+
+function saveRecipe() {
+  if (!lastPrompts.pos || lastPrompts.pos === 'Configure your inputs to generate a prompt…') {
+    showToast('Generate a prompt first!'); return;
+  }
+  const name = prompt('Recipe name:', `recipe-${Date.now()}`);
+  if (!name) return;
+  const recipe = {
+    name,
+    robotType: document.getElementById('robot-type').value,
+    taskDesc: document.getElementById('task-desc').value,
+    params: {
+      guidanceScale: document.getElementById('guidance-scale').value,
+      tempConsistency: document.getElementById('temp-consistency').value,
+      sourceWeight: document.getElementById('source-weight').value,
+      numSteps: document.getElementById('num-steps').value,
+      modelSize: document.getElementById('model-size').value,
+    },
+    selections: {
+      camera:  getSelected('camera'),
+      lighting:getSelected('lighting'),
+      env:     getSelected('env'),
+      style:   getSelected('style'),
+      motion:  getSelected('motion'),
+      neg:     getSelected('neg'),
+    },
+    prompts: { ...lastPrompts },
+    savedAt: new Date().toISOString(),
+  };
+  recipes.unshift(recipe);
+  localStorage.setItem(RECIPE_KEY, JSON.stringify(recipes));
+  renderRecipes();
+  showToast(`✓ Saved recipe: ${name}`);
+}
+
+function loadRecipe(idx) {
+  const r = recipes[idx];
+  if (!r) return;
+  document.getElementById('robot-type').value = r.robotType || '';
+  document.getElementById('task-desc').value  = r.taskDesc || '';
+  if (r.params) {
+    Object.entries(r.params).forEach(([k,v]) => {
+      const el = document.getElementById(k === 'modelSize' ? 'model-size' : k.replace(/([A-Z])/g, '-$1').toLowerCase());
+      if (el) { el.value = v; updateParam(el.id, v); }
+    });
+  }
+  // Re-select chips
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  if (r.selections) {
+    Object.entries(r.selections).forEach(([cat, ids]) => {
+      ids.forEach(id => {
+        const chip = document.querySelector(`.chip[data-cat=${cat}][data-id="${id}"]`);
+        if (chip) chip.classList.add('selected');
+      });
+    });
+  }
+  generate();
+  showToast(`Loaded: ${r.name}`);
+}
+
+function deleteRecipe(idx) {
+  recipes.splice(idx, 1);
+  localStorage.setItem(RECIPE_KEY, JSON.stringify(recipes));
+  renderRecipes();
+  showToast('Recipe deleted');
+}
+
+function renderRecipes() {
+  const body = document.getElementById('recipes-body');
+  if (recipes.length === 0) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px 0">No saved recipes yet. Build a prompt and click Save Recipe.</div>';
+    return;
+  }
+  body.innerHTML = `<div class="recipe-list">${
+    recipes.map((r, i) => `
+      <div class="recipe-item" onclick="loadRecipe(${i})">
+        <span class="recipe-item-name">${r.name}</span>
+        <span class="recipe-item-meta">${new Date(r.savedAt).toLocaleDateString()}</span>
+        <span class="recipe-del" onclick="event.stopPropagation();deleteRecipe(${i})">✕</span>
+      </div>`
+    ).join('')
+  }</div>`;
+}
+renderRecipes();
+
+// ── Toast ──
+let toastTimer;
+const toastEl = document.createElement('div');
+Object.assign(toastEl.style, {
+  position:'fixed', bottom:'24px', right:'24px',
+  background:'var(--surface2)', border:'1px solid var(--accent)',
+  borderRadius:'10px', padding:'10px 16px', fontSize:'13px',
+  color:'var(--text)', zIndex:'999', opacity:'0',
+  transform:'translateY(8px)', transition:'all 0.2s', pointerEvents:'none',
+});
+document.body.appendChild(toastEl);
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.style.opacity = '1';
+  toastEl.style.transform = 'translateY(0)';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.style.opacity = '0'; toastEl.style.transform = 'translateY(8px)'; }, 2600);
+}
+
+// ── Kick off ──
+generate();
+</script>
+</body>
+</html>

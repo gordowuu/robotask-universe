@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VideoFrameDiff — Robot Video Visual Comparison</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #080810;
+      --surf:   #0e0e1c;
+      --surf2:  #14141f;
+      --surf3:  #1b1b2e;
+      --border: #1e1e32;
+      --brd2:   #26263c;
+      --text:   #e0e0f4;
+      --muted:  #55556a;
+      --accent: #f472b6;
+      --acc2:   #db2777;
+      --cyan:   #22d3ee;
+      --green:  #34d399;
+      --yellow: #fbbf24;
+      --r:      10px;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      background: rgba(8,8,16,0.97);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent); }
+    .header-spacer { flex: 1; }
+
+    .main { padding: 24px; max-width: 1280px; margin: 0 auto; }
+
+    /* ── Config bar ── */
+    .config-bar {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 20px;
+      display: flex; align-items: flex-end; gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .cfg-group { display: flex; flex-direction: column; gap: 5px; }
+    .cfg-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    input[type=text], input[type=file] {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      border-radius: 7px; color: var(--text);
+      font-family: inherit; font-size: 13px;
+      padding: 7px 11px; outline: none;
+      transition: border-color 0.15s; min-width: 200px;
+    }
+    input[type=text]:focus { border-color: var(--accent); }
+    input[type=text]::placeholder { color: var(--muted); }
+    input[type=file] { cursor: pointer; padding: 5px 10px; }
+    .btn {
+      padding: 9px 20px; border-radius: 8px;
+      font-size: 13px; font-weight: 700;
+      cursor: pointer; border: none; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--acc2); transform: translateY(-1px); }
+    .btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .btn-ghost:hover { background: var(--surf3); }
+
+    /* ── View grid ── */
+    .view-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .view-panel {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+    }
+    .view-header {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surf2);
+    }
+    .view-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .view-canvas-wrap { position: relative; aspect-ratio: 16/9; background: #000; }
+    .view-canvas-wrap canvas,
+    .view-canvas-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .view-canvas-wrap canvas { position: absolute; inset: 0; }
+
+    /* Diff mode toggle */
+    .diff-mode-row { display: flex; gap: 4px; }
+    .diff-mode-btn {
+      background: var(--surf3); border: 1px solid var(--brd2);
+      color: var(--muted); padding: 3px 9px;
+      border-radius: 5px; font-size: 11px; cursor: pointer;
+      transition: all 0.12s;
+    }
+    .diff-mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Scrubber & controls ── */
+    .controls-row {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 12px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      margin-bottom: 16px;
+    }
+    .scrubber-line { display: flex; align-items: center; gap: 10px; }
+    .scr-time { font-size: 11px; color: var(--muted); min-width: 34px; font-variant-numeric: tabular-nums; }
+    input[type=range]#time-scrubber {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; background: var(--brd2);
+      outline: none; cursor: pointer;
+    }
+    input[type=range]#time-scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .btns-line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .ctrl-btn {
+      background: var(--surf2); border: 1px solid var(--brd2); color: var(--text);
+      padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .ctrl-btn:hover { background: var(--surf3); }
+    .ctrl-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .ctrl-spacer { flex: 1; }
+    .frame-counter { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Stats panel ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-box {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 12px 14px;
+    }
+    .stat-box-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+    .stat-box-val { font-size: 20px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+    .stat-box-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Heatmap colorbar ── */
+    .colorbar-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 10px 16px;
+      margin-bottom: 16px;
+    }
+    .colorbar-label { font-size: 12px; color: var(--muted); }
+    .colorbar-track {
+      flex: 1; height: 10px; border-radius: 5px;
+      background: linear-gradient(to right, #000 0%, #0000ff 20%, #00ffff 50%, #ffff00 75%, #ff0000 100%);
+    }
+    .colorbar-min { font-size: 11px; color: var(--muted); }
+    .colorbar-max { font-size: 11px; color: #f87171; }
+
+    /* Threshold slider */
+    .threshold-row { display: flex; align-items: center; gap: 10px; }
+    .thr-label { font-size: 12px; color: var(--muted); }
+    input[type=range]#threshold-slider {
+      width: 160px; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; background: var(--brd2); outline: none; cursor: pointer;
+    }
+    input[type=range]#threshold-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+      background: var(--yellow); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .thr-val { font-size: 12px; font-weight: 700; color: var(--yellow); min-width: 30px; }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: absolute; inset: 0;
+      background: rgba(8,8,16,0.9);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: var(--muted);
+      z-index: 5;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surf2); border: 1px solid rgba(244,114,182,0.4);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      z-index: 300; opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) {
+      .view-grid { grid-template-columns: 1fr; }
+      .config-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Video<span>Frame</span>Diff</div>
+  <span style="font-size:12px;color:var(--muted)">Robot Video Visual Comparison Tool</span>
+  <div class="header-spacer"></div>
+  <button class="btn btn-ghost" onclick="exportDiffFrame()" style="font-size:12px;padding:5px 14px">⬇ Export Frame</button>
+</header>
+
+<div class="main">
+
+  <!-- Config -->
+  <div class="config-bar">
+    <div class="cfg-group">
+      <span class="cfg-label">Video A (Reference)</span>
+      <input type="text" id="url-a" placeholder="original.mp4 or URL" value="original.mp4">
+    </div>
+    <div class="cfg-group">
+      <span class="cfg-label">Video B (Generated)</span>
+      <input type="text" id="url-b" placeholder="generated_1.mp4 or URL" value="generated_1.mp4">
+    </div>
+    <div class="cfg-group">
+      <span class="cfg-label">Scale Factor</span>
+      <input type="text" id="scale-factor" value="1.0" style="min-width:70px" oninput="renderCurrentFrame()">
+    </div>
+    <button class="btn btn-primary" onclick="loadVideos()">▶ Load & Compare</button>
+    <button class="btn btn-ghost" onclick="resetState()">↺ Reset</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-box"><div class="stat-box-label">Mean Diff</div><div class="stat-box-val" id="stat-mean">—</div><div class="stat-box-sub">avg pixel delta</div></div>
+    <div class="stat-box"><div class="stat-box-label">Max Diff</div><div class="stat-box-val" id="stat-max">—</div><div class="stat-box-sub">peak pixel delta</div></div>
+    <div class="stat-box"><div class="stat-box-label">Changed Pixels</div><div class="stat-box-val" id="stat-changed">—</div><div class="stat-box-sub">above threshold</div></div>
+    <div class="stat-box"><div class="stat-box-label">PSNR</div><div class="stat-box-val" id="stat-psnr">—</div><div class="stat-box-sub">higher = more similar</div></div>
+    <div class="stat-box"><div class="stat-box-label">Current Frame</div><div class="stat-box-val" id="stat-frame">—</div><div class="stat-box-sub">of approx total</div></div>
+  </div>
+
+  <!-- Colorbar + threshold -->
+  <div class="colorbar-row">
+    <span class="colorbar-label">Diff Map:</span>
+    <span class="colorbar-min">0</span>
+    <div class="colorbar-track"></div>
+    <span class="colorbar-max">255</span>
+    <div class="threshold-row">
+      <span class="thr-label">Threshold:</span>
+      <input type="range" id="threshold-slider" min="0" max="100" step="1" value="15" oninput="updateThreshold(this.value)">
+      <span class="thr-val" id="thr-val">15</span>
+    </div>
+  </div>
+
+  <!-- Three views -->
+  <div class="view-grid">
+    <!-- Video A -->
+    <div class="view-panel">
+      <div class="view-header">
+        <span class="view-title">🔵 Video A — Reference</span>
+        <span style="font-size:11px;color:var(--muted)" id="label-a">original.mp4</span>
+      </div>
+      <div class="view-canvas-wrap" id="wrap-a">
+        <video id="vid-a" playsinline muted></video>
+        <canvas id="canvas-a"></canvas>
+        <div class="loading-overlay" id="loading-a" style="display:none">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Diff -->
+    <div class="view-panel">
+      <div class="view-header">
+        <span class="view-title">🔴 Pixel Diff</span>
+        <div class="diff-mode-row">
+          <button class="diff-mode-btn active" data-mode="heatmap" onclick="setDiffMode('heatmap',this)">Heatmap</button>
+          <button class="diff-mode-btn" data-mode="abs" onclick="setDiffMode('abs',this)">Abs</button>
+          <button class="diff-mode-btn" data-mode="mask" onclick="setDiffMode('mask',this)">Mask</button>
+          <button class="diff-mode-btn" data-mode="overlay" onclick="setDiffMode('overlay',this)">Overlay</button>
+        </div>
+      </div>
+      <div class="view-canvas-wrap">
+        <canvas id="canvas-diff"></canvas>
+        <div class="loading-overlay" id="loading-diff" style="display:none">No videos loaded</div>
+      </div>
+    </div>
+
+    <!-- Video B -->
+    <div class="view-panel">
+      <div class="view-header">
+        <span class="view-title">🟣 Video B — Generated</span>
+        <span style="font-size:11px;color:var(--muted)" id="label-b">generated_1.mp4</span>
+      </div>
+      <div class="view-canvas-wrap" id="wrap-b">
+        <video id="vid-b" playsinline muted></video>
+        <canvas id="canvas-b"></canvas>
+        <div class="loading-overlay" id="loading-b" style="display:none">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-row">
+    <div class="scrubber-line">
+      <span class="scr-time" id="scr-cur">0:00</span>
+      <input type="range" id="time-scrubber" min="0" max="100" step="0.1" value="0">
+      <span class="scr-time" id="scr-dur">0:00</span>
+    </div>
+    <div class="btns-line">
+      <button class="ctrl-btn" onclick="step(-1)">⏮ –1f</button>
+      <button class="ctrl-btn" onclick="togglePlay()" id="play-btn">▶ Play</button>
+      <button class="ctrl-btn" onclick="step(1)">+1f ⏭</button>
+      <button class="ctrl-btn" onclick="setPlaybackSpeed(0.5)">½×</button>
+      <button class="ctrl-btn active" onclick="setPlaybackSpeed(1)">1×</button>
+      <button class="ctrl-btn" onclick="setPlaybackSpeed(2)">2×</button>
+      <div class="ctrl-spacer"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="chk-sync" checked onchange="setSyncMode(this.checked)"> Sync A+B
+      </label>
+      <span class="frame-counter" id="frame-counter">frame — / —</span>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── State ──
+  const vidA = document.getElementById('vid-a');
+  const vidB = document.getElementById('vid-b');
+  const canvasA = document.getElementById('canvas-a');
+  const canvasB = document.getElementById('canvas-b');
+  const canvasDiff = document.getElementById('canvas-diff');
+  const ctxA = canvasA.getContext('2d', { willReadFrequently: true });
+  const ctxB = canvasB.getContext('2d', { willReadFrequently: true });
+  const ctxD = canvasDiff.getContext('2d', { willReadFrequently: true });
+  const timeScrubber = document.getElementById('time-scrubber');
+
+  let diffMode    = 'heatmap';
+  let threshold   = 15;
+  let syncMode    = true;
+  let isPlaying   = false;
+  let playbackSpd = 1;
+  let rafId       = null;
+  let frameRate   = 30; // assumed
+
+  function fmtT(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+
+  // ── Load videos ──
+  function loadVideos() {
+    const urlA = document.getElementById('url-a').value.trim();
+    const urlB = document.getElementById('url-b').value.trim();
+    if (!urlA || !urlB) { showToast('Enter both video URLs!'); return; }
+
+    document.getElementById('label-a').textContent = urlA;
+    document.getElementById('label-b').textContent = urlB;
+    document.getElementById('loading-a').style.display = '';
+    document.getElementById('loading-b').style.display = '';
+    document.getElementById('loading-diff').style.display = '';
+    document.getElementById('loading-diff').textContent = 'Loading videos…';
+
+    vidA.src = urlA; vidA.load();
+    vidB.src = urlB; vidB.load();
+
+    let aReady = false, bReady = false;
+    const checkReady = () => {
+      if (!aReady || !bReady) return;
+      document.getElementById('loading-a').style.display = 'none';
+      document.getElementById('loading-b').style.display = 'none';
+      document.getElementById('loading-diff').style.display = 'none';
+
+      const dur = Math.min(vidA.duration, vidB.duration);
+      timeScrubber.max = dur;
+      document.getElementById('scr-dur').textContent = fmtT(dur);
+      document.getElementById('stat-frame').textContent = `0`;
+
+      // Size canvases to video dimensions
+      const W = vidA.videoWidth  || 640;
+      const H = vidA.videoHeight || 360;
+      [canvasA, canvasB, canvasDiff].forEach(c => { c.width = W; c.height = H; });
+
+      vidA.currentTime = 0; vidB.currentTime = 0;
+      renderCurrentFrame();
+      showToast('✓ Videos loaded — scrub to compare');
+    };
+
+    vidA.addEventListener('loadeddata', () => { aReady = true; checkReady(); }, { once: true });
+    vidB.addEventListener('loadeddata', () => { bReady = true; checkReady(); }, { once: true });
+    vidA.addEventListener('error', () => showToast('Error loading Video A'));
+    vidB.addEventListener('error', () => showToast('Error loading Video B'));
+  }
+
+  // ── Render current frame diff ──
+  function renderCurrentFrame() {
+    if (!vidA.videoWidth || !vidB.videoWidth) return;
+
+    const W = canvasA.width, H = canvasA.height;
+    const scaleFactor = parseFloat(document.getElementById('scale-factor').value) || 1;
+
+    // Draw frames to offscreen canvases
+    ctxA.drawImage(vidA, 0, 0, W, H);
+    ctxB.drawImage(vidB, 0, 0, W, H);
+
+    // Get pixel data
+    const dataA = ctxA.getImageData(0, 0, W, H);
+    const dataB = ctxB.getImageData(0, 0, W, H);
+    const diff  = ctxD.createImageData(W, H);
+
+    const pA = dataA.data, pB = dataB.data, pD = diff.data;
+
+    let sumDiff = 0, maxDiff = 0, changedPixels = 0, mse = 0;
+    const n = W * H;
+
+    for (let i = 0; i < n; i++) {
+      const idx = i * 4;
+      const dr = Math.abs(pA[idx]   - pB[idx]);
+      const dg = Math.abs(pA[idx+1] - pB[idx+1]);
+      const db = Math.abs(pA[idx+2] - pB[idx+2]);
+      const d  = (dr + dg + db) / 3 * scaleFactor;
+
+      sumDiff += d;
+      mse += d * d;
+      if (d > maxDiff) maxDiff = d;
+      if (d > threshold) changedPixels++;
+
+      // Color the diff output
+      if (diffMode === 'heatmap') {
+        // Blue→cyan→yellow→red heatmap
+        const t = Math.min(d / 255, 1);
+        let r,g,b;
+        if (t < 0.25) { r=0; g=Math.round(t*4*255); b=255; }
+        else if (t < 0.5) { r=0; g=255; b=Math.round((1-(t-0.25)*4)*255); }
+        else if (t < 0.75) { r=Math.round((t-0.5)*4*255); g=255; b=0; }
+        else { r=255; g=Math.round((1-(t-0.75)*4)*255); b=0; }
+        pD[idx]=r; pD[idx+1]=g; pD[idx+2]=b; pD[idx+3]=255;
+      } else if (diffMode === 'abs') {
+        const v = Math.min(Math.round(d * 3), 255);
+        pD[idx]=v; pD[idx+1]=v; pD[idx+2]=v; pD[idx+3]=255;
+      } else if (diffMode === 'mask') {
+        const hot = d > threshold;
+        pD[idx]  = hot ? 244 : 0;
+        pD[idx+1]= hot ? 63  : 0;
+        pD[idx+2]= hot ? 94  : 0;
+        pD[idx+3]= 255;
+      } else if (diffMode === 'overlay') {
+        // Blend A with diff highlight
+        const hot = d > threshold;
+        pD[idx]  = hot ? 244 : pA[idx];
+        pD[idx+1]= hot ? 63  : pA[idx+1];
+        pD[idx+2]= hot ? 94  : pA[idx+2];
+        pD[idx+3]= 255;
+      }
+    }
+
+    ctxD.putImageData(diff, 0, 0);
+
+    // Stats
+    const meanDiff = sumDiff / n;
+    const psnr = mse > 0 ? (10 * Math.log10((255*255) / (mse/n))).toFixed(1) : '∞';
+    const changedPct = (changedPixels / n * 100).toFixed(1);
+
+    document.getElementById('stat-mean').textContent = meanDiff.toFixed(1);
+    document.getElementById('stat-max').textContent  = Math.round(maxDiff);
+    document.getElementById('stat-changed').textContent = changedPct + '%';
+    document.getElementById('stat-psnr').textContent = psnr + ' dB';
+    document.getElementById('stat-frame').textContent =
+      Math.round(vidA.currentTime * frameRate) + '';
+
+    // Update time display
+    const t = vidA.currentTime;
+    document.getElementById('scr-cur').textContent = fmtT(t);
+    if (!isPlaying) timeScrubber.value = t;
+    document.getElementById('frame-counter').textContent =
+      `frame ${Math.round(t * frameRate)} · t=${t.toFixed(3)}s`;
+  }
+
+  // ── Playback ──
+  function togglePlay() {
+    isPlaying = !isPlaying;
+    document.getElementById('play-btn').textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+    if (isPlaying) {
+      vidA.play().catch(()=>{});
+      if (syncMode) vidB.play().catch(()=>{});
+      animateLoop();
+    } else {
+      vidA.pause(); vidB.pause();
+      cancelAnimationFrame(rafId);
+    }
+  }
+
+  function animateLoop() {
+    rafId = requestAnimationFrame(() => {
+      renderCurrentFrame();
+      timeScrubber.value = vidA.currentTime;
+      document.getElementById('scr-cur').textContent = fmtT(vidA.currentTime);
+      if (isPlaying && vidA.currentTime < vidA.duration) animateLoop();
+      else if (vidA.currentTime >= vidA.duration) {
+        isPlaying = false;
+        document.getElementById('play-btn').textContent = '▶ Play';
+        vidA.currentTime = 0; vidB.currentTime = 0;
+        renderCurrentFrame();
+      }
+    });
+  }
+
+  function step(frames) {
+    const dt = frames / frameRate;
+    const newT = Math.max(0, Math.min(vidA.duration || 999, vidA.currentTime + dt));
+    vidA.currentTime = newT;
+    if (syncMode) vidB.currentTime = newT;
+    setTimeout(renderCurrentFrame, 50);
+  }
+
+  function setPlaybackSpeed(s) {
+    playbackSpd = s;
+    vidA.playbackRate = s;
+    vidB.playbackRate = s;
+    document.querySelectorAll('.ctrl-btn').forEach((b,i) => {
+      if (b.textContent.includes('×')) b.classList.toggle('active', ['½×','1×','2×'][i-4] === `${s===0.5?'½':s}×`);
+    });
+  }
+
+  function setSyncMode(v) {
+    syncMode = v;
+    if (v) vidB.currentTime = vidA.currentTime;
+  }
+
+  // Scrubber
+  let scrubDrag = false;
+  timeScrubber.addEventListener('mousedown', () => { scrubDrag = true; });
+  timeScrubber.addEventListener('mouseup', () => {
+    const t = parseFloat(timeScrubber.value);
+    vidA.currentTime = t; if (syncMode) vidB.currentTime = t;
+    setTimeout(renderCurrentFrame, 100);
+    scrubDrag = false;
+  });
+  timeScrubber.addEventListener('input', () => {
+    document.getElementById('scr-cur').textContent = fmtT(parseFloat(timeScrubber.value));
+  });
+
+  // Video seeked → re-render
+  vidA.addEventListener('seeked', () => { setTimeout(renderCurrentFrame, 50); });
+  vidB.addEventListener('seeked', () => { setTimeout(renderCurrentFrame, 50); });
+
+  // ── Diff mode ──
+  function setDiffMode(mode, btn) {
+    diffMode = mode;
+    document.querySelectorAll('.diff-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCurrentFrame();
+  }
+
+  // ── Threshold ──
+  function updateThreshold(val) {
+    threshold = parseInt(val);
+    document.getElementById('thr-val').textContent = val;
+    renderCurrentFrame();
+  }
+
+  // ── Export diff frame ──
+  function exportDiffFrame() {
+    if (!vidA.videoWidth) { showToast('Load videos first!'); return; }
+    // Create a composite: A | diff | B
+    const W = canvasA.width, H = canvasA.height;
+    const out = document.createElement('canvas');
+    out.width = W * 3; out.height = H;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(canvasA,    0,     0, W, H);
+    ctx.drawImage(canvasDiff, W,     0, W, H);
+    ctx.drawImage(canvasB,    W * 2, 0, W, H);
+    // Labels
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    [[0,'Video A (Ref)'], [W,'Diff'], [W*2,'Video B (Gen)']].forEach(([x, label]) => {
+      ctx.fillRect(x, 0, 120, 24);
+      ctx.fillStyle = '#eee'; ctx.font = '13px system-ui';
+      ctx.fillText(label, x + 8, 17); ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    });
+    const a = Object.assign(document.createElement('a'), {
+      href: out.toDataURL('image/png'),
+      download: `frame-diff-${Math.round(vidA.currentTime*100)}.png`
+    });
+    a.click();
+    showToast('Frame exported!');
+  }
+
+  // ── Reset ──
+  function resetState() {
+    vidA.src = ''; vidB.src = '';
+    [ctxA, ctxB, ctxD].forEach(c => { c.clearRect(0, 0, 9999, 9999); });
+    document.getElementById('loading-diff').style.display = '';
+    document.getElementById('loading-diff').textContent = 'No videos loaded';
+    ['stat-mean','stat-max','stat-changed','stat-psnr','stat-frame'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    isPlaying = false; cancelAnimationFrame(rafId);
+    document.getElementById('play-btn').textContent = '▶ Play';
+  }
+
+  // ── Keyboard ──
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    switch (e.key) {
+      case ' ': e.preventDefault(); togglePlay(); break;
+      case 'ArrowLeft':  e.preventDefault(); step(-1); break;
+      case 'ArrowRight': e.preventDefault(); step(1); break;
+      case ',': step(-1); break;  // frame back
+      case '.': step(1); break;   // frame forward
+      case 'r': vidA.currentTime=0; if(syncMode) vidB.currentTime=0; renderCurrentFrame(); break;
+    }
+  });
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+  }
+
+  // Show initial loading overlay
+  document.getElementById('loading-diff').style.display = '';
+  document.getElementById('loading-diff').textContent = 'Load videos to begin';
+</script>
+</body>
+</html>

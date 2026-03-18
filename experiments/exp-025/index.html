@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrainingMonitor — Live Training Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#252525;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;min-height:100vh}
+
+/* ═══ Header ═══ */
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+header h1{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.header-right{display:flex;align-items:center;gap:16px}
+.run-name{font-size:.82rem;color:var(--accent);background:rgba(41,151,255,.1);padding:4px 12px;border-radius:100px}
+.header-time{font-size:.78rem;color:var(--dim);font-variant-numeric:tabular-nums}
+
+/* ═══ Stats Row ═══ */
+.stats-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:16px 24px}
+.stat-card{padding:16px;border-radius:12px;background:var(--card);border:1px solid var(--border)}
+.stat-label{font-size:.7rem;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.stat-value{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-sub{font-size:.72rem;color:var(--dim);margin-top:2px;display:flex;align-items:center;gap:4px}
+.stat-sub .up{color:var(--green)}
+.stat-sub .down{color:var(--red)}
+
+/* ═══ Grid Layout ═══ */
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 24px 24px}
+.grid-full{grid-column:1/-1}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:0}
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.panel-title{font-size:.85rem;font-weight:600}
+.panel-badge{font-size:.7rem;padding:2px 8px;border-radius:100px;background:rgba(41,151,255,.1);color:var(--accent)}
+.chart-container{position:relative;width:100%;height:280px}
+
+/* ═══ GPU Bars ═══ */
+.gpu-list{display:flex;flex-direction:column;gap:10px}
+.gpu-item{display:flex;align-items:center;gap:12px}
+.gpu-name{font-size:.78rem;color:var(--dim);min-width:60px}
+.gpu-bar-bg{flex:1;height:20px;background:rgba(255,255,255,.04);border-radius:4px;overflow:hidden;position:relative}
+.gpu-bar-fill{height:100%;border-radius:4px;transition:width .5s ease;position:relative}
+.gpu-bar-fill::after{content:attr(data-pct);position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.65rem;font-weight:600;color:#fff}
+.gpu-temp{font-size:.75rem;color:var(--dim);min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.gpu-mem{font-size:.72rem;color:var(--dim);min-width:70px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ═══ Progress ═══ */
+.progress-section{margin-top:8px}
+.progress-bar-bg{width:100%;height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;margin:8px 0}
+.progress-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--purple));transition:width .5s ease}
+.progress-stats{display:flex;justify-content:space-between;font-size:.75rem;color:var(--dim)}
+
+/* ═══ Log ═══ */
+.log-output{background:#0d0d0d;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'SF Mono',Monaco,'Cascadia Code',monospace;font-size:.72rem;line-height:1.7;max-height:200px;overflow-y:auto;color:var(--dim)}
+.log-output .log-time{color:#555}
+.log-output .log-info{color:var(--accent)}
+.log-output .log-warn{color:var(--yellow)}
+.log-output .log-metric{color:var(--green)}
+
+/* ═══ Sample Gallery ═══ */
+.sample-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px}
+.sample-thumb{aspect-ratio:1;border-radius:8px;overflow:hidden;background:#111;border:1px solid var(--border);position:relative;cursor:pointer;transition:transform .2s}
+.sample-thumb:hover{transform:scale(1.05)}
+.sample-thumb canvas{width:100%;height:100%}
+.sample-thumb .epoch-label{position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:4px;font-size:.6rem;color:var(--dim)}
+
+/* ═══ Checkpoints ═══ */
+.checkpoint-list{display:flex;flex-direction:column;gap:6px}
+.ckpt-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.02);font-size:.78rem}
+.ckpt-icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.7rem}
+.ckpt-icon.best{background:rgba(48,209,88,.15);color:var(--green)}
+.ckpt-icon.regular{background:rgba(255,255,255,.06);color:var(--dim)}
+.ckpt-name{flex:1;font-weight:500}
+.ckpt-metric{color:var(--dim);font-variant-numeric:tabular-nums}
+
+/* ═══ Controls ═══ */
+.controls-bar{padding:12px 24px;display:flex;gap:8px;align-items:center}
+.ctrl-btn{padding:6px 14px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:8px;cursor:pointer;font-size:.78rem;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:6px}
+.ctrl-btn:hover{border-color:var(--accent)}
+.ctrl-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrl-btn.danger{border-color:var(--red);color:var(--red)}
+.ctrl-btn.danger:hover{background:var(--red);color:#fff}
+
+@media(max-width:900px){
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+  .grid{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span> TrainingMonitor</h1>
+  <div class="header-right">
+    <span class="run-name" id="runName">run: cosmos-ft-pick-v3</span>
+    <span class="header-time" id="headerTime">00:00:00 elapsed</span>
+  </div>
+</header>
+
+<div class="controls-bar">
+  <button class="ctrl-btn active" id="simBtn" onclick="toggleSim()">⚡ Live Simulation</button>
+  <button class="ctrl-btn" onclick="resetSim()">↺ Reset</button>
+  <button class="ctrl-btn" onclick="changeSpeed(1)">1×</button>
+  <button class="ctrl-btn" onclick="changeSpeed(5)">5×</button>
+  <button class="ctrl-btn" onclick="changeSpeed(20)">20×</button>
+  <div style="flex:1"></div>
+  <button class="ctrl-btn danger" onclick="toggleSim()">⏹ Stop Training</button>
+</div>
+
+<div class="stats-row" id="statsRow">
+  <div class="stat-card">
+    <div class="stat-label">Epoch</div>
+    <div class="stat-value" id="statEpoch">0 / 100</div>
+    <div class="stat-sub"><span id="epochPct">0%</span> complete</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Training Loss</div>
+    <div class="stat-value" id="statLoss">—</div>
+    <div class="stat-sub" id="lossTrend"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Val Loss</div>
+    <div class="stat-value" id="statValLoss">—</div>
+    <div class="stat-sub" id="valTrend"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Learning Rate</div>
+    <div class="stat-value" id="statLR">—</div>
+    <div class="stat-sub">cosine schedule</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Throughput</div>
+    <div class="stat-value" id="statThroughput">—</div>
+    <div class="stat-sub">samples/sec</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">ETA</div>
+    <div class="stat-value" id="statETA">—</div>
+    <div class="stat-sub" id="etaSub">remaining</div>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Loss Chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">📉 Loss Curves</span>
+      <span class="panel-badge" id="lossBadge">0 steps</span>
+    </div>
+    <div class="chart-container"><canvas id="lossChart"></canvas></div>
+  </div>
+
+  <!-- GPU Utilization -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">🖥️ GPU Utilization</span>
+      <span class="panel-badge">4× A100 80GB</span>
+    </div>
+    <div class="gpu-list" id="gpuList"></div>
+    <div style="margin-top:16px">
+      <div class="panel-header" style="margin-bottom:8px">
+        <span class="panel-title" style="font-size:.78rem">⏱ Training Progress</span>
+      </div>
+      <div class="progress-section">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-stats">
+          <span id="progressSteps">Step 0 / 10,000</span>
+          <span id="progressPct">0%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LR Chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">📈 Learning Rate Schedule</span>
+      <span class="panel-badge">cosine w/ warmup</span>
+    </div>
+    <div class="chart-container" style="height:200px"><canvas id="lrChart"></canvas></div>
+  </div>
+
+  <!-- Checkpoints -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">💾 Checkpoints</span>
+    </div>
+    <div class="checkpoint-list" id="ckptList">
+      <div style="font-size:.8rem;color:var(--dim);text-align:center;padding:20px">No checkpoints yet</div>
+    </div>
+  </div>
+
+  <!-- Sample Gallery -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">🖼️ Sample Outputs (per epoch)</span>
+      <span class="panel-badge" id="sampleBadge">0 samples</span>
+    </div>
+    <div class="sample-gallery" id="sampleGallery">
+      <div style="grid-column:1/-1;font-size:.8rem;color:var(--dim);text-align:center;padding:20px">Samples will appear as training progresses...</div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="panel grid-full">
+    <div class="panel-header">
+      <span class="panel-title">📋 Training Log</span>
+    </div>
+    <div class="log-output" id="logOutput"></div>
+  </div>
+</div>
+
+<script>
+/* ═══ Chart Setup ═══ */
+Chart.defaults.color = '#86868b';
+Chart.defaults.borderColor = '#252525';
+Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif";
+Chart.defaults.font.size = 11;
+
+const lossChart = new Chart(document.getElementById('lossChart'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Train Loss', data: [], borderColor: '#2997ff', backgroundColor: 'rgba(41,151,255,.1)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 },
+      { label: 'Val Loss', data: [], borderColor: '#bf5af2', backgroundColor: 'rgba(191,90,242,.05)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: { display: true, title: { display: true, text: 'Step' } },
+      y: { display: true, title: { display: true, text: 'Loss' }, min: 0 }
+    },
+    plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 16 } } }
+  }
+});
+
+const lrChart = new Chart(document.getElementById('lrChart'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{ label: 'Learning Rate', data: [], borderColor: '#30d158', backgroundColor: 'rgba(48,209,88,.05)', fill: true, tension: .3, pointRadius: 0, borderWidth: 1.5 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { display: true, title: { display: true, text: 'Step' } },
+      y: { display: true, title: { display: true, text: 'LR' } }
+    },
+    plugins: { legend: { display: false } }
+  }
+});
+
+/* ═══ Simulation State ═══ */
+const TOTAL_EPOCHS = 100;
+const TOTAL_STEPS = 10000;
+const STEPS_PER_EPOCH = TOTAL_STEPS / TOTAL_EPOCHS;
+const GPUS = ['GPU 0', 'GPU 1', 'GPU 2', 'GPU 3'];
+const BASE_LR = 3e-4;
+const WARMUP_STEPS = 500;
+
+let step = 0;
+let running = true;
+let speed = 1;
+let startTime = Date.now();
+let trainLossHistory = [];
+let valLossHistory = [];
+let lrHistory = [];
+let checkpoints = [];
+let bestValLoss = Infinity;
+let intervalId;
+
+function getLR(s) {
+  if(s < WARMUP_STEPS) return BASE_LR * (s / WARMUP_STEPS);
+  const progress = (s - WARMUP_STEPS) / (TOTAL_STEPS - WARMUP_STEPS);
+  return BASE_LR * 0.5 * (1 + Math.cos(Math.PI * progress));
+}
+
+function getTrainLoss(s) {
+  const base = 2.5 * Math.exp(-s / 2000) + 0.15;
+  const noise = (Math.random() - 0.5) * 0.08 * Math.exp(-s / 5000);
+  return Math.max(0.05, base + noise);
+}
+
+function getValLoss(s) {
+  const base = 2.8 * Math.exp(-s / 2500) + 0.22;
+  const noise = (Math.random() - 0.5) * 0.06;
+  // Slight overfitting after 70%
+  const overfit = s > TOTAL_STEPS * 0.7 ? (s - TOTAL_STEPS * 0.7) / TOTAL_STEPS * 0.3 : 0;
+  return Math.max(0.1, base + noise + overfit);
+}
+
+/* ═══ GPU Rendering ═══ */
+function renderGPUs() {
+  const list = document.getElementById('gpuList');
+  list.innerHTML = GPUS.map((name, i) => {
+    const util = 85 + Math.random() * 12 + (running ? 0 : -80);
+    const temp = 62 + Math.random() * 15;
+    const memUsed = 68 + Math.random() * 8;
+    const color = util > 90 ? 'var(--red)' : util > 70 ? 'var(--yellow)' : 'var(--green)';
+    return `<div class="gpu-item">
+      <span class="gpu-name">${name}</span>
+      <div class="gpu-bar-bg">
+        <div class="gpu-bar-fill" data-pct="${Math.round(util)}%" style="width:${util}%;background:${color}"></div>
+      </div>
+      <span class="gpu-temp">${Math.round(temp)}°C</span>
+      <span class="gpu-mem">${memUsed.toFixed(1)}/80 GB</span>
+    </div>`;
+  }).join('');
+}
+
+/* ═══ Sample Generation ═══ */
+function generateSample(epoch) {
+  const cv = document.createElement('canvas');
+  cv.width = 120; cv.height = 120;
+  const cx = cv.getContext('2d');
+  
+  // Background gradient based on epoch progress
+  const quality = epoch / TOTAL_EPOCHS;
+  cx.fillStyle = `hsl(${220 + quality * 20}, ${20 + quality * 30}%, ${8 + quality * 5}%)`;
+  cx.fillRect(0, 0, 120, 120);
+  
+  // "Robot arm" - gets cleaner with training
+  const noise = (1 - quality) * 15;
+  cx.strokeStyle = `rgba(191,90,242,${0.3 + quality * 0.5})`;
+  cx.lineWidth = 2 + quality * 2;
+  cx.lineCap = 'round';
+  cx.beginPath();
+  cx.moveTo(60 + (Math.random()-.5)*noise, 100);
+  cx.lineTo(45 + (Math.random()-.5)*noise, 60 + (Math.random()-.5)*noise);
+  cx.lineTo(55 + (Math.random()-.5)*noise*0.5, 35 + (Math.random()-.5)*noise*0.5);
+  cx.stroke();
+  
+  // Object
+  cx.fillStyle = `rgba(48,209,88,${0.3 + quality * 0.5})`;
+  cx.beginPath();
+  cx.arc(80 + (Math.random()-.5)*noise, 75 + (Math.random()-.5)*noise, 8 + quality * 4, 0, Math.PI*2);
+  cx.fill();
+  
+  // Table
+  cx.fillStyle = `rgba(255,255,255,${0.05 + quality * 0.08})`;
+  cx.fillRect(10, 90, 100, 25);
+  
+  return cv;
+}
+
+/* ═══ Logging ═══ */
+function addLog(type, msg) {
+  const log = document.getElementById('logOutput');
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  log.innerHTML += `<div><span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span></div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ═══ Main Update Loop ═══ */
+function tick() {
+  if(!running || step >= TOTAL_STEPS) return;
+  
+  step += speed;
+  if(step > TOTAL_STEPS) step = TOTAL_STEPS;
+  
+  const epoch = Math.floor(step / STEPS_PER_EPOCH);
+  const lr = getLR(step);
+  const tLoss = getTrainLoss(step);
+  
+  // Record every N steps
+  if(step % (10 * speed) < speed || step === TOTAL_STEPS) {
+    trainLossHistory.push({ x: step, y: tLoss });
+    lrHistory.push({ x: step, y: lr });
+    
+    // Val loss every epoch
+    if(trainLossHistory.length % Math.max(1, Math.floor(STEPS_PER_EPOCH / (10 * speed))) === 0) {
+      const vLoss = getValLoss(step);
+      valLossHistory.push({ x: step, y: vLoss });
+      
+      // Checkpoint logic
+      if(vLoss < bestValLoss) {
+        bestValLoss = vLoss;
+        checkpoints.push({ step, epoch, loss: vLoss, best: true });
+        addLog('metric', `✓ New best val_loss=${vLoss.toFixed(4)} — saving checkpoint`);
+      }
+    }
+    
+    // Update charts
+    lossChart.data.labels = trainLossHistory.map(d => d.x);
+    lossChart.data.datasets[0].data = trainLossHistory.map(d => d.y);
+    lossChart.data.datasets[1].data = valLossHistory.map(d => d.y);
+    lossChart.update('none');
+    
+    lrChart.data.labels = lrHistory.map(d => d.x);
+    lrChart.data.datasets[0].data = lrHistory.map(d => d.y);
+    lrChart.update('none');
+  }
+  
+  // Update stats
+  document.getElementById('statEpoch').textContent = `${epoch} / ${TOTAL_EPOCHS}`;
+  document.getElementById('epochPct').textContent = `${Math.round(step / TOTAL_STEPS * 100)}%`;
+  document.getElementById('statLoss').textContent = tLoss.toFixed(4);
+  document.getElementById('statValLoss').textContent = valLossHistory.length ? valLossHistory[valLossHistory.length-1].y.toFixed(4) : '—';
+  document.getElementById('statLR').textContent = lr.toExponential(2);
+  document.getElementById('statThroughput').textContent = (38 + Math.random() * 8).toFixed(1);
+  
+  // ETA
+  const pct = step / TOTAL_STEPS;
+  const elapsed = (Date.now() - startTime) / 1000;
+  const eta = pct > 0.01 ? elapsed / pct * (1 - pct) : 0;
+  document.getElementById('statETA').textContent = formatDuration(eta);
+  document.getElementById('headerTime').textContent = formatDuration(elapsed) + ' elapsed';
+  
+  // Loss trends
+  if(trainLossHistory.length >= 2) {
+    const prev = trainLossHistory[trainLossHistory.length-2].y;
+    const delta = tLoss - prev;
+    document.getElementById('lossTrend').innerHTML = delta < 0 
+      ? `<span class="down">▼ ${Math.abs(delta).toFixed(4)}</span>` 
+      : `<span class="up">▲ ${delta.toFixed(4)}</span>`;
+  }
+  
+  // Progress
+  document.getElementById('progressFill').style.width = `${pct * 100}%`;
+  document.getElementById('progressSteps').textContent = `Step ${step.toLocaleString()} / ${TOTAL_STEPS.toLocaleString()}`;
+  document.getElementById('progressPct').textContent = `${Math.round(pct * 100)}%`;
+  document.getElementById('lossBadge').textContent = `${trainLossHistory.length} points`;
+  
+  // GPU
+  renderGPUs();
+  
+  // Samples at epoch boundaries
+  const prevEpoch = Math.floor((step - speed) / STEPS_PER_EPOCH);
+  if(epoch > prevEpoch && epoch % 5 === 0) {
+    addSample(epoch);
+    addLog('info', `Epoch ${epoch}/${TOTAL_EPOCHS} complete — train_loss=${tLoss.toFixed(4)}, lr=${lr.toExponential(2)}`);
+  }
+  
+  // Checkpoints display
+  renderCheckpoints();
+  
+  // Log periodic messages
+  if(step % (500 * Math.max(1, speed/5)) < speed) {
+    const msgs = [
+      `Step ${step}: loss=${tLoss.toFixed(4)}, lr=${lr.toExponential(2)}, throughput=${(38+Math.random()*8).toFixed(1)} samp/s`,
+      `Gradient norm: ${(0.5 + Math.random() * 1.5).toFixed(3)}`,
+      `Memory: ${(68 + Math.random()*8).toFixed(1)}GB / 80GB per GPU`,
+    ];
+    addLog('metric', msgs[Math.floor(Math.random() * msgs.length)]);
+  }
+  
+  if(step >= TOTAL_STEPS) {
+    running = false;
+    addLog('info', '🎉 Training complete! Final val_loss=' + bestValLoss.toFixed(4));
+    document.getElementById('simBtn').textContent = '✓ Complete';
+    document.getElementById('simBtn').classList.remove('active');
+  }
+}
+
+function addSample(epoch) {
+  const gallery = document.getElementById('sampleGallery');
+  if(gallery.querySelector('div[style]')) gallery.innerHTML = ''; // Remove placeholder
+  
+  const cv = generateSample(epoch);
+  const thumb = document.createElement('div');
+  thumb.className = 'sample-thumb';
+  thumb.innerHTML = `<span class="epoch-label">Epoch ${epoch}</span>`;
+  thumb.prepend(cv);
+  gallery.appendChild(thumb);
+  document.getElementById('sampleBadge').textContent = `${gallery.children.length} samples`;
+}
+
+function renderCheckpoints() {
+  const list = document.getElementById('ckptList');
+  if(checkpoints.length === 0) return;
+  const recent = checkpoints.slice(-5).reverse();
+  list.innerHTML = recent.map(c => `
+    <div class="ckpt-item">
+      <div class="ckpt-icon ${c.best ? 'best' : 'regular'}">${c.best ? '★' : '○'}</div>
+      <span class="ckpt-name">ckpt_epoch${c.epoch}_step${c.step}</span>
+      <span class="ckpt-metric">val_loss: ${c.loss.toFixed(4)}</span>
+    </div>
+  `).join('');
+}
+
+function formatDuration(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function toggleSim() {
+  running = !running;
+  const btn = document.getElementById('simBtn');
+  btn.textContent = running ? '⚡ Live Simulation' : '⏸ Paused';
+  btn.classList.toggle('active', running);
+  if(running) startTime = Date.now() - (step / TOTAL_STEPS) * 300000; // Approximate
+}
+
+function resetSim() {
+  step = 0; trainLossHistory = []; valLossHistory = []; lrHistory = [];
+  checkpoints = []; bestValLoss = Infinity; startTime = Date.now();
+  running = true;
+  lossChart.data.labels = []; lossChart.data.datasets.forEach(d => d.data = []); lossChart.update();
+  lrChart.data.labels = []; lrChart.data.datasets[0].data = []; lrChart.update();
+  document.getElementById('sampleGallery').innerHTML = '<div style="grid-column:1/-1;font-size:.8rem;color:var(--dim);text-align:center;padding:20px">Samples will appear as training progresses...</div>';
+  document.getElementById('logOutput').innerHTML = '';
+  document.getElementById('ckptList').innerHTML = '<div style="font-size:.8rem;color:var(--dim);text-align:center;padding:20px">No checkpoints yet</div>';
+  addLog('info', '🚀 Training started — cosmos-ft-pick-v3, 4×A100-80GB, batch=32');
+  document.getElementById('simBtn').textContent = '⚡ Live Simulation';
+  document.getElementById('simBtn').classList.add('active');
+}
+
+function changeSpeed(s) {
+  speed = s;
+  document.querySelectorAll('.ctrl-btn').forEach(b => {
+    if(b.textContent.includes('×')) b.classList.toggle('active', b.textContent === s+'×');
+  });
+}
+
+/* ═══ Init ═══ */
+addLog('info', '🚀 Training started — cosmos-ft-pick-v3, 4×A100-80GB, batch=32');
+addLog('info', 'Model: Cosmos Transfer 2.5 (fine-tune), 1.2B params');
+addLog('info', 'Dataset: pick-and-place-v3 (2,400 episodes, 6 tasks)');
+renderGPUs();
+
+setInterval(tick, 100);
+</script>
+</body>
+</html>

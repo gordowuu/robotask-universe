@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwagBot Research Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #07070e;
+      --surf:   #0d0d1a;
+      --surf2:  #121220;
+      --surf3:  #181828;
+      --border: #1c1c30;
+      --brd2:   #232338;
+      --text:   #e0e0f4;
+      --muted:  #545472;
+      --accent: #7c6cfc;
+      --acc2:   #5a4de0;
+      --green:  #22c55e;
+      --amber:  #fbbf24;
+      --red:    #ef4444;
+      --cyan:   #22d3ee;
+      --pink:   #f472b6;
+    }
+    html, body { min-height: 100%; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
+
+    /* ── Header ── */
+    header {
+      background: rgba(7,7,14,0.97);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 40;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 20px; font-weight: 900; letter-spacing: -0.03em; }
+    .logo-swag { color: var(--accent); }
+    .logo-bot  { color: #fff; }
+    .logo-dash { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 4px; }
+    .header-spacer { flex: 1; }
+    .header-meta { font-size: 12px; color: var(--muted); }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      background: var(--surf);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      display: flex; gap: 0;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 11px 18px; font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.14s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: #fff; border-bottom-color: var(--accent); }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+    .page { padding: 28px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted); margin-bottom: 14px;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-value { font-size: 28px; font-weight: 900; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ── Experiment cards ── */
+    .exp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px;
+    }
+    .exp-card {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      transition: all 0.15s;
+      cursor: default;
+    }
+    .exp-card:hover { border-color: var(--brd2); transform: translateY(-1px); }
+    .exp-card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+    .exp-id {
+      font-size: 11px; font-weight: 700; padding: 2px 8px;
+      border-radius: 5px; background: rgba(124,108,252,0.15);
+      border: 1px solid rgba(124,108,252,0.25); color: #c4b5fd;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .exp-name { font-size: 14px; font-weight: 700; color: #fff; flex: 1; }
+    .status-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .status-badge.success { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+    .status-badge.failed  { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.2); }
+    .status-badge.crash   { background: rgba(245,158,11,0.12); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+    .exp-result { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+    .exp-result.truncated { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .exp-notes { font-size: 11px; color: #404055; font-style: italic; margin-bottom: 8px; }
+    .exp-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .exp-ts { font-size: 11px; color: var(--muted); }
+    .exp-link {
+      font-size: 11px; color: var(--accent);
+      background: rgba(124,108,252,0.1); border: 1px solid rgba(124,108,252,0.2);
+      padding: 2px 8px; border-radius: 5px; text-decoration: none;
+    }
+    .exp-link:hover { background: rgba(124,108,252,0.2); }
+
+    /* ── Timeline ── */
+    .timeline { position: relative; padding-left: 24px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 7px; top: 0; bottom: 0;
+      width: 2px; background: var(--border);
+    }
+    .tl-item { position: relative; margin-bottom: 20px; }
+    .tl-dot {
+      position: absolute; left: -20px; top: 4px;
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid var(--bg);
+    }
+    .tl-dot.success { background: var(--green); }
+    .tl-dot.failed  { background: var(--red); }
+    .tl-time { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .tl-name { font-size: 13px; font-weight: 700; color: #fff; }
+    .tl-id   { font-size: 11px; color: var(--accent); margin-right: 6px; }
+    .tl-desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    /* ── Findings ── */
+    .findings-content {
+      font-size: 14px; line-height: 1.75;
+      color: var(--text);
+    }
+    .findings-content h2 { font-size: 18px; font-weight: 700; margin: 24px 0 8px; color: #fff; }
+    .findings-content h3 { font-size: 15px; font-weight: 700; margin: 16px 0 6px; color: #ddd; }
+    .findings-content p  { color: #c0c0d8; margin-bottom: 10px; }
+    .findings-content ul { margin: 8px 0 12px 20px; }
+    .findings-content li { color: #c0c0d8; margin-bottom: 4px; }
+    .findings-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    .findings-content th { text-align: left; padding: 7px 10px; color: var(--muted); font-size: 11px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .findings-content td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .findings-content strong { color: #fff; }
+    .findings-content code { background: var(--surf2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #a5b4fc; }
+    .findings-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Progress donut ── */
+    .donut-row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+    .donut-wrap { position: relative; width: 80px; height: 80px; }
+    .donut-wrap svg { transform: rotate(-90deg); }
+    .donut-center {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+    }
+    .donut-pct { font-size: 16px; font-weight: 800; }
+    .donut-lbl { font-size: 10px; color: var(--muted); }
+
+    /* ── Progress bar ── */
+    .prog-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .prog-label { font-size: 12px; min-width: 110px; }
+    .prog-track { flex: 1; height: 7px; background: var(--brd2); border-radius: 4px; overflow: hidden; }
+    .prog-fill  { height: 100%; border-radius: 4px; }
+    .prog-val   { font-size: 12px; font-weight: 700; min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── GitHub link ── */
+    .gh-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px;
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+      transition: all 0.14s;
+    }
+    .gh-link:hover { background: var(--surf3); border-color: var(--brd2); }
+
+    @media (max-width: 700px) {
+      .page { padding: 16px; }
+      .exp-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo"><span class="logo-swag">Swag</span><span class="logo-bot">Bot</span><span class="logo-dash">Research Dashboard</span></div>
+    <div class="header-meta">synphonyco · robot eval tooling · session 2026-03-17</div>
+  </div>
+  <div class="header-spacer"></div>
+  <a class="gh-link" href="https://github.com/gordowuu/swagbot-workspace" target="_blank">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.746 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+    GitHub
+  </a>
+</header>
+
+<div class="tab-bar">
+  <div class="tab active" data-tab="overview" onclick="showTab('overview')">📊 Overview</div>
+  <div class="tab" data-tab="experiments" onclick="showTab('experiments')">🧪 Experiments</div>
+  <div class="tab" data-tab="timeline" onclick="showTab('timeline')">📅 Timeline</div>
+  <div class="tab" data-tab="findings" onclick="showTab('findings')">💡 Findings</div>
+  <div class="tab" data-tab="apps" onclick="showTab('apps')">🚀 Apps</div>
+</div>
+
+<!-- ════════════════════════
+     OVERVIEW
+     ════════════════════════ -->
+<div class="view active" id="tab-overview">
+  <div class="page">
+
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+      <!-- Success donut -->
+      <div class="card">
+        <div class="card-title">Success Rate</div>
+        <div class="donut-row" id="donut-row"></div>
+        <div id="status-bars"></div>
+      </div>
+
+      <!-- Categories breakdown -->
+      <div class="card">
+        <div class="card-title">Experiment Types</div>
+        <div id="type-bars"></div>
+      </div>
+    </div>
+
+    <!-- Recent experiments -->
+    <div class="card">
+      <div class="card-title">Recent Experiments</div>
+      <div class="exp-grid" id="recent-exps"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════
+     EXPERIMENTS
+     ════════════════════════ -->
+<div class="view" id="tab-experiments">
+  <div class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="font-size:18px;font-weight:700">All Experiments</h2>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="filter-status" onchange="renderExperiments()" style="background:var(--surf2);border:1px solid var(--brd2);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;outline:none">
+          <option value="">All Status</option>
+          <option value="success">Success</option>
+          <option value="failed">Failed</option>
+        </select>
+        <input type="text" id="search-exp" oninput="renderExperiments()" placeholder="Search…"
+          style="background:var(--surf2);border:1px solid var(--brd2);color:var(--text);padding:5px 12px;border-radius:6px;font-size:12px;outline:none;width:180px">
+      </div>
+    </div>
+    <div class="exp-grid" id="all-exps"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════
+     TIMELINE
+     ════════════════════════ -->
+<div class="view" id="tab-timeline">
+  <div class="page">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:20px">Experiment Timeline</h2>
+    <div class="timeline" id="timeline-root"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════
+     FINDINGS
+     ════════════════════════ -->
+<div class="view" id="tab-findings">
+  <div class="page">
+    <div class="card">
+      <div class="findings-content" id="findings-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════
+     APPS
+     ════════════════════════ -->
+<div class="view" id="tab-apps">
+  <div class="page">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">Deployed Apps</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px">All apps are standalone HTML files ready to deploy to Vercel. Each lives in <code style="background:var(--surf2);padding:1px 5px;border-radius:3px;font-size:11px">experiments/&lt;id&gt;/index.html</code>.</p>
+    <div class="exp-grid" id="apps-grid"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     DATA — experiments + findings embedded
+     ════════════════════════════════════════ -->
+<script>
+// ── Experiment data (from experiments.tsv) ──
+const EXPERIMENTS = [
+  {
+    id: 'exp-001 (syntests)',
+    name: 'SynTests Scrubber',
+    status: 'success',
+    type: 'syntests',
+    result: 'Added shared seek bar below video grid with CSS fill track, drag-to-seek, touch support',
+    notes: '--pct CSS var for fill; dragging flag prevents jitter',
+    timestamp: '2026-03-17T16:30Z',
+    file: null,
+  },
+  {
+    id: 'exp-002 (syntests)',
+    name: 'SynTests Speed Control',
+    status: 'success',
+    type: 'syntests',
+    result: '¼×/½×/1×/2× speed buttons, active state via classList.toggle, playbackRate preserved',
+    notes: 'Works with scrubber; responsive',
+    timestamp: '2026-03-17T16:35Z',
+    file: null,
+  },
+  {
+    id: 'exp-001',
+    name: 'SwagScore',
+    status: 'success',
+    type: 'webapp',
+    result: '5-dim sliders (smoothness/completion/naturalness/speed/recovery), score color gradient, localStorage, CSV export, results modal, keyboard shortcuts',
+    notes: 'VIDEOS+DIMENSIONS config; aggregate weighted scoring; deploy-ready',
+    timestamp: '2026-03-17T16:45Z',
+    file: '../exp-001/index.html',
+    emoji: '⭐',
+    desc: 'Human evaluation interface for robot videos with 5-dimension rating sliders',
+  },
+  {
+    id: 'exp-002',
+    name: 'CosmosPromptForge',
+    status: 'success',
+    type: 'webapp',
+    result: '5 chip categories (camera/lighting/env/style/motion), guidance scale/consistency/weight sliders, live prompt generation, JSON config, CLI command, variation suggestions, recipe save/load',
+    notes: 'Gradient branding; token breakdown; no API key needed',
+    timestamp: '2026-03-17T17:00Z',
+    file: '../exp-002/index.html',
+    emoji: '🚀',
+    desc: 'Webapp for designing Cosmos Transfer 2.5 prompts for robot video augmentation',
+  },
+  {
+    id: 'exp-003',
+    name: 'VibeCheck',
+    status: 'success',
+    type: 'webapp',
+    result: '5-vibe buttons (💀🤔😐👍🔥) with glow + flash, keyboard 1-5, progress bar, undo, scrubber, distribution bars, CSV export',
+    notes: '350ms auto-advance; fully keyboard-driven',
+    timestamp: '2026-03-17T17:15Z',
+    file: '../exp-003/index.html',
+    emoji: '⚡',
+    desc: 'Micro-labeling tool — one-click emoji reactions for fast robot video triage',
+  },
+  {
+    id: 'exp-004',
+    name: 'EvalSession',
+    status: 'success',
+    type: 'webapp',
+    result: 'Host setup + evaluator + live dashboard tabs, URL hash session config, 5-dim sliders, per-video aggregated scores, auto-refresh every 10s, CSV export',
+    notes: 'URL hash encodes full session; swappable for Supabase Realtime',
+    timestamp: '2026-03-17T17:30Z',
+    file: '../exp-004/index.html',
+    emoji: '🔴',
+    desc: 'Multi-evaluator sync tool with live result aggregation dashboard',
+  },
+  {
+    id: 'exp-005',
+    name: 'DataAugGallery',
+    status: 'success',
+    type: 'webapp',
+    result: 'Grouped cards, canvas poster extraction, filter chips, grid/list toggle, quick-tag buttons, lightbox with scrubber + notes, localStorage tags, CSV export',
+    notes: 'Lazy poster loading via requestIdleCallback',
+    timestamp: '2026-03-17T17:50Z',
+    file: '../exp-005/index.html',
+    emoji: '🖼',
+    desc: 'Visual gallery for comparing original vs Cosmos-augmented robot datasets',
+  },
+  {
+    id: 'exp-006',
+    name: 'TaskRubricGen',
+    status: 'success',
+    type: 'webapp',
+    result: '10 task-type chips, difficulty+precision sliders, 3/4/5-level selector, 6 eval dimensions with weight sliders, task-type overrides, live preview, printable CSS, download HTML',
+    notes: 'Scoring formula callout; 400ms debounced preview',
+    timestamp: '2026-03-17T18:05Z',
+    file: '../exp-006/index.html',
+    emoji: '📋',
+    desc: 'Smart template-based rubric generator for any robot task',
+  },
+  {
+    id: 'exp-007',
+    name: 'SynTests Combined',
+    status: 'success',
+    type: 'syntests',
+    result: 'Scrubber + speed + per-video labels + keyboard shortcuts (Space/R/arrows/[/]) all in one clean template update',
+    notes: 'Drift indicator shows actual offset; kbd hint bar',
+    timestamp: '2026-03-17T18:20Z',
+    file: null,
+  },
+  {
+    id: 'exp-008',
+    name: 'PolicyLeaderboard',
+    status: 'success',
+    type: 'webapp',
+    result: 'POLICIES+DIMENSIONS config, weighted aggregate, task tabs, tag filters, search, sortable columns, expandable rows, sparklines, dim bars, delta vs prev, medal icons, CSV export',
+    notes: 'TAG_COLORS config; sample 7 policies across 2 tasks',
+    timestamp: '2026-03-17T18:40Z',
+    file: '../exp-008/index.html',
+    emoji: '🏆',
+    desc: 'JSON-driven ranked leaderboard for tracking robot policy eval results',
+  },
+  {
+    id: 'exp-009',
+    name: 'VideoFrameDiff',
+    status: 'success',
+    type: 'webapp',
+    result: '4 diff modes (heatmap/abs/mask/overlay), PSNR + mean/max + changed pixels %, threshold slider, sync A+B, frame step ±1, rAF loop, export composite PNG',
+    notes: 'willReadFrequently hint; colorbar legend',
+    timestamp: '2026-03-17T18:55Z',
+    file: '../exp-009/index.html',
+    emoji: '🔬',
+    desc: 'Pure JS frame-by-frame pixel diff tool with heatmap overlay + PSNR',
+  },
+  {
+    id: 'exp-010',
+    name: 'AugmentationMatrix',
+    status: 'success',
+    type: 'webapp',
+    result: 'N×M CSS table grid, ROWS+COLS config, auto-play all, global scrubber, speed, column highlight, canvas diff overlay, per-cell time, lightbox, keyboard shortcuts',
+    notes: 'rAF time loop; sticky scrubber; demo 4×6 matrix',
+    timestamp: '2026-03-17T19:15Z',
+    file: '../exp-010/index.html',
+    emoji: '⊞',
+    desc: 'N×M synchronized video comparison grid with diff overlay',
+  },
+  {
+    id: 'exp-011',
+    name: 'KeyframeExtractor',
+    status: 'success',
+    type: 'script',
+    result: 'Python CLI: variance+motion_delta scoring, min-gap enforcement, top-N selection, base64 JPEG thumbnails, self-contained HTML with lightbox + score bars',
+    notes: 'Graceful cv2 import; lazy loading; normalized scores',
+    timestamp: '2026-03-17T19:30Z',
+    file: null,
+    emoji: '🎞',
+    desc: 'Python script extracting most interesting frames as a self-contained HTML contact sheet',
+  },
+  {
+    id: 'exp-013',
+    name: 'RobotDataTimeline',
+    status: 'success',
+    type: 'webapp',
+    result: 'Chart.js trajectory viz: paste JSON → line/area charts grouped 4 joints/chart, 4 built-in examples, smoothing, video sync with playhead, CSV export',
+    notes: 'Chart.js from unpkg; multi-format JSON parsing; auto-loads arm6dof example',
+    timestamp: '2026-03-17T20:15Z',
+    file: '../exp-013/index.html',
+    emoji: '📈',
+    desc: 'Interactive robot trajectory visualization + optional video sync',
+  },
+  {
+    id: 'exp-014',
+    name: 'Cosmos Config Builder',
+    status: 'success',
+    type: 'webapp',
+    result: '6 presets, all inference params, 5 output formats (YAML/JSON/Python/CLI/Bash), copy/download, save preset to localStorage',
+    notes: 'objToYAML serializer; VRAM estimate; no API key',
+    timestamp: '2026-03-17T20:30Z',
+    file: '../exp-014/index.html',
+    emoji: '⚙️',
+    desc: 'Full Cosmos Transfer 2.5 inference config builder with 5 output formats',
+  },
+  {
+    id: 'exp-016',
+    name: 'BatchDiff',
+    status: 'success',
+    type: 'script',
+    result: 'Python CLI: 3 input modes, PSNR+SSIM+mean/max diff+changed pixels%, quality score 0-100, ranked HTML report with stats bar + sortable table + diff thumbnails + lightbox, CSV',
+    notes: 'SSIM approximation; applyColorMap diff viz; cv2 + numpy',
+    timestamp: '2026-03-17T20:50Z',
+    file: null,
+    emoji: '📊',
+    desc: 'Batch pixel-diff analysis across robot video dataset — ranked HTML report',
+  },
+  {
+    id: 'exp-017',
+    name: 'SwagScore v2',
+    status: 'success',
+    type: 'webapp',
+    result: '3-tab UI (Rate/Compare/Results): flag-for-review, canvas pixel diff compare mode (4 modes), PSNR stats, HTML report export, flagged column in CSV',
+    notes: 'rAF diff loop; tabs share localStorage; keyboard F=flag',
+    timestamp: '2026-03-17T21:20Z',
+    file: '../exp-017/index.html',
+    emoji: '⭐+',
+    desc: 'SwagScore with flag-for-review + canvas diff comparison mode + HTML report',
+  },
+  {
+    id: 'exp-018',
+    name: 'AugQualityScore',
+    status: 'success',
+    type: 'webapp',
+    result: 'Browser auto-scoring: canvas frame sampling, PSNR+mean/max diff+changed%, quality 0-100, diff thumbnails, ranked score cards, detail modal, CSV export',
+    notes: 'Pure browser canvas; async frame sampling; 3 vis modes',
+    timestamp: '2026-03-17T21:40Z',
+    file: '../exp-018/index.html',
+    emoji: '🏅',
+    desc: 'Browser-based auto pixel-diff quality scoring for Cosmos generated videos',
+  },
+  {
+    id: 'exp-019',
+    name: 'VibeCheck v2',
+    status: 'success',
+    type: 'webapp',
+    result: 'Custom VIBES array, SHOW_NOTES flag, notes field, CSS conic-gradient pie chart in results, distribution bars, notes table, dynamic hover colors per vibe button',
+    notes: 'Pure CSS conic-gradient pie; keyboard Ctrl+Z=undo; done screen shows all vibes',
+    timestamp: '2026-03-17T22:00Z',
+    file: '../exp-019/index.html',
+    emoji: '⚡+',
+    desc: 'VibeCheck with custom emoji sets, notes field, and CSS pie chart results',
+  },
+  {
+    id: 'exp-020',
+    name: 'SynTests Frame Step',
+    status: 'success',
+    type: 'syntests',
+    result: '±1f step buttons added to template header, stepAll() function, comma/period keyboard shortcuts, getFrameDt helper',
+    notes: 'Non-breaking; existing scrubber/speed/playAll preserved',
+    timestamp: '2026-03-17T22:10Z',
+    file: null,
+    emoji: '⏭',
+    desc: 'SynTests template: ±1 frame step buttons and comma/period keyboard shortcuts',
+  },
+  {
+    id: 'exp-021',
+    name: 'PolicyLeaderboard v2',
+    status: 'success',
+    type: 'webapp',
+    result: 'SVG radar chart in detail panel, run notes field per policy, shareable URL hash filter state (task/tags/sort/selected), click-to-select policy detail, history pills',
+    notes: 'Pure SVG radar; btoa/atob URL encoding; 8 sample policies',
+    timestamp: '2026-03-17T22:20Z',
+    file: '../exp-021/index.html',
+    emoji: '🏆+',
+    desc: 'PolicyLeaderboard with SVG radar chart, run notes, and shareable URL',
+  },
+  {
+    id: 'exp-022',
+    name: 'RobotOpsPlaybook',
+    status: 'success',
+    type: 'webapp',
+    result: '7-section checklist (env/model/data/prompts/inference/quality/training), per-item checkboxes with localStorage, progress bar, code snippets with copy, tool links, done banner',
+    notes: 'escapeHTML for safety; links to all major tools in the suite',
+    timestamp: '2026-03-17T22:35Z',
+    file: '../exp-022/index.html',
+    emoji: '📋',
+    desc: 'Guided Cosmos Transfer 2.5 pipeline setup checklist with code snippets',
+  },
+  {
+    id: 'exp-023',
+    name: 'DemoShowcase',
+    status: 'success',
+    type: 'webapp',
+    result: 'Apple-style portfolio page: particle background, scroll-triggered animations, counter animation, 6 demo cards, 3 animated Canvas visualizations (particles, bar chart, robot arm), timeline, tech grid, glass morphism',
+    notes: 'Pure HTML/CSS/JS; IntersectionObserver for scroll reveals; requestAnimationFrame Canvas anims',
+    timestamp: '2026-03-17T18:20Z',
+    file: '../exp-023/index.html',
+    emoji: '🌟',
+    desc: 'Stunning investor-ready portfolio page for Synphony Robotics demos',
+  },
+  {
+    id: 'exp-024',
+    name: 'AnnotationStudio',
+    status: 'success',
+    type: 'webapp',
+    result: 'Full annotation workspace: bbox/point/polygon tools, video frame stepping, COCO JSON + simple JSON export, demo frame generator, label categories, undo stack, keyboard shortcuts, crosshair overlay',
+    notes: 'COCO-format export with segmentation + area + bbox; right-click to close polygon',
+    timestamp: '2026-03-17T18:25Z',
+    file: '../exp-024/index.html',
+    emoji: '🎯',
+    desc: 'Spatial annotation tool for robot video frames with COCO-style export',
+  },
+  {
+    id: 'exp-025',
+    name: 'TrainingMonitor',
+    status: 'success',
+    type: 'webapp',
+    result: 'Real-time dashboard: Chart.js loss curves, LR schedule, 4×A100 GPU bars, epoch progress, ETA, throughput, checkpoint tracking, sample gallery, training log, speed controls',
+    notes: 'Simulated training loop with realistic loss dynamics; cosine LR; overfitting visualization',
+    timestamp: '2026-03-17T18:30Z',
+    file: '../exp-025/index.html',
+    emoji: '📊',
+    desc: 'Live training dashboard mockup with loss curves, GPU utilization, and sample outputs',
+  },
+  {
+    id: 'exp-026',
+    name: 'GripperSimulator',
+    status: 'success',
+    type: 'webapp',
+    result: 'Canvas 2D physics: Dynamixel XL430 gripper (-0.075–0.5 rad), object collision, grasp detection, trajectory playback, telemetry, demo sequences',
+    notes: 'Maps to real WidowX 250s hardware; spring-damper dynamics',
+    timestamp: '2026-03-17T18:40Z',
+    file: '../exp-026/index.html',
+    emoji: '🦾',
+    desc: 'Interactive 2D gripper simulator with Dynamixel range and trajectory playback',
+  },
+  {
+    id: 'exp-027',
+    name: 'PaperDigest',
+    status: 'success',
+    type: 'webapp',
+    result: 'Keyword-based paper analysis: method/domain/task detection, relevance scoring, limitations, follow-up questions, 5 example papers',
+    notes: 'No API needed; pure keyword extraction + template matching',
+    timestamp: '2026-03-17T18:45Z',
+    file: '../exp-027/index.html',
+    emoji: '📄',
+    desc: 'Robotics paper summary tool with keyword extraction and relevance scoring',
+  },
+  {
+    id: 'exp-028',
+    name: 'DatasetStats',
+    status: 'success',
+    type: 'webapp',
+    result: '6 Chart.js visualizations: task distribution, success rates, duration histogram, real vs augmented, timeline, cameras. Demo with 2400 episodes',
+    notes: 'Accepts arbitrary JSON metadata; all charts responsive',
+    timestamp: '2026-03-17T18:50Z',
+    file: '../exp-028/index.html',
+    emoji: '📊',
+    desc: 'Robot dataset analytics dashboard with rich Chart.js visualizations',
+  },
+  {
+    id: 'exp-029',
+    name: 'ABTestRunner',
+    status: 'success',
+    type: 'webapp',
+    result: 'Bootstrap statistical testing: per-task p-values, 95% CIs, W-L-T summary, verdict banner, grouped bar + doughnut charts, demo data',
+    notes: 'Bootstrap n=2000 for overall significance; binomial CI sampling',
+    timestamp: '2026-03-17T18:55Z',
+    file: '../exp-029/index.html',
+    emoji: '⚖️',
+    desc: 'Policy A/B comparison tool with bootstrap confidence intervals',
+  },
+  {
+    id: 'exp-030',
+    name: 'FailureAtlas',
+    status: 'success',
+    type: 'webapp',
+    result: '85 failures across 8 categories, severity filter, charts, Canvas thumbnails, detail modal with root cause + action items, JSON export',
+    notes: 'Weighted category generation; seeded RNG for thumbnails',
+    timestamp: '2026-03-17T19:00Z',
+    file: '../exp-030/index.html',
+    emoji: '🔍',
+    desc: 'Failure mode taxonomy browser for systematic debugging of robot policies',
+  },
+];
+
+// ── Findings text (rendered as markdown-lite) ──
+const FINDINGS_MD = `
+# FINDINGS — SwagBot Research Session
+
+**Date:** 2026-03-17 · **Domain:** Robot video evaluation tooling (synphonyco)
+
+---
+
+## Key Technical Findings
+
+### 1. Pure HTML/JS is fully sufficient for production-quality eval tools
+All 10 web apps are single-file, zero-dependency HTML/JS. \`localStorage\` for persistence, URL hash for config sharing (EvalSession), Blob + \`URL.createObjectURL\` for CSV/PNG export, native \`<video>\` + \`<canvas>\` for all media. Deploy-ready to Vercel with zero build step.
+
+### 2. Cosmos Transfer 2.5 prompt structure
+Key variables: \`robot_type + task + camera + lighting + environment + visual_style + motion\`. Guidance scale 7–12, temporal consistency 0.7–0.9, source weight 0.5–0.7 are the critical inference params.
+
+### 3. Micro-labeling (VibeCheck) vs multi-dim rating (SwagScore)
+VibeCheck: **~2s/video**. SwagScore: **~30s/video**. Best workflow: **VibeCheck first** (filter 💀/🤔), then **SwagScore** on the good set. This mirrors human annotation pipeline best practices.
+
+### 4. URL hash session sharing eliminates backend dependency
+EvalSession encodes full config as base64 URL hash. No server needed for 2–5 evaluator teams. Supabase Realtime is the obvious upgrade path for cross-device real-time sync.
+
+### 5. Canvas API for real-time pixel diff
+\`getImageData\` on 640×360 canvas at ~30fps is fast enough for interactive use in VideoFrameDiff. PSNR, mean/max diff, changed pixels % are all computable in pure JS. Key: use \`{ willReadFrequently: true }\` on canvas context.
+
+### 6. Heatmap coloring: blue→cyan→yellow→red
+More perceptually informative than grayscale abs diff. Consistently applied across VideoFrameDiff, PolicyLeaderboard, SwagScore, VibeCheck.
+
+---
+
+## Workflow Recommendation
+
+For Gordo's Cosmos Transfer 2.5 eval pipeline:
+
+1. **CosmosPromptForge** — Design prompts before running Cosmos
+2. **AugmentationMatrix** — See all augmentations at a glance
+3. **VibeCheck** — Fast triage (2s/video), filter to best 30%
+4. **SwagScore** — Deep 5-dim rating on the filtered set
+5. **PolicyLeaderboard** — Track improvements over training runs
+6. **VideoFrameDiff** — Debug specific augmentation artifacts
+7. **DataAugGallery** — Archive and tag the full dataset
+8. **EvalSession** — When you need a second human evaluator
+
+---
+
+## Ideas for Next Phase
+
+- **EvalSession v2:** Supabase Realtime for true cross-device sync
+- **BatchDiff:** Run VideoFrameDiff across a full dataset → CSV of per-video PSNR metrics
+- **RobotDataTimeline:** Interactive Chart.js trajectory visualization from JSON
+- **Cosmos Config Builder:** Full YAML/JSON config builder for Cosmos Transfer inference
+- **SwagScore v2:** Flag for re-review + diff comparison between two selected videos
+`;
+
+// ── Score color ──
+function scoreColor(pct) {
+  if (pct < 0.5) return `rgb(240,${Math.round(pct*2*155+52)},52)`;
+  return `rgb(${Math.round((1-(pct-0.5)*2)*240)},207,52)`;
+}
+
+// ── Build overview ──
+function buildOverview() {
+  const total   = EXPERIMENTS.length;
+  const success = EXPERIMENTS.filter(e => e.status === 'success').length;
+  const webapps = EXPERIMENTS.filter(e => e.type === 'webapp').length;
+  const scripts = EXPERIMENTS.filter(e => e.type === 'script').length;
+  const syntests= EXPERIMENTS.filter(e => e.type === 'syntests').length;
+
+  // Stats
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Experiments</div>
+      <div class="stat-value" style="color:var(--accent)">${total}</div>
+      <div class="stat-sub">total run</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Success Rate</div>
+      <div class="stat-value" style="color:var(--green)">${Math.round(success/total*100)}%</div>
+      <div class="stat-sub">${success} / ${total}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Web Apps Built</div>
+      <div class="stat-value" style="color:var(--cyan)">${webapps}</div>
+      <div class="stat-sub">deploy-ready</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Python Scripts</div>
+      <div class="stat-value" style="color:var(--amber)">${scripts}</div>
+      <div class="stat-sub">CLI tools</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">SynTests Patches</div>
+      <div class="stat-value">${syntests}</div>
+      <div class="stat-sub">template updates</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Failed</div>
+      <div class="stat-value" style="color:var(--muted)">0</div>
+      <div class="stat-sub">clean session</div>
+    </div>
+  `;
+
+  // Donut
+  const pct = success / total * 100;
+  const circ = 2 * Math.PI * 28;
+  const dash = circ * pct / 100;
+  document.getElementById('donut-row').innerHTML = `
+    <div class="donut-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="28" fill="none" stroke="var(--brd2)" stroke-width="8"/>
+        <circle cx="40" cy="40" r="28" fill="none" stroke="var(--green)" stroke-width="8"
+          stroke-dasharray="${dash} ${circ}" stroke-linecap="round"/>
+      </svg>
+      <div class="donut-center">
+        <div class="donut-pct" style="color:var(--green)">${Math.round(pct)}%</div>
+        <div class="donut-lbl">success</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--green)">${success}</div>
+      <div style="font-size:12px;color:var(--muted)">successful runs</div>
+      <div style="font-size:18px;font-weight:800;margin-top:8px;color:var(--muted)">0</div>
+      <div style="font-size:12px;color:var(--muted)">failed runs</div>
+    </div>
+  `;
+
+  // Status bars
+  const types = [
+    { label: 'Web Apps', n: webapps, color: 'var(--cyan)' },
+    { label: 'SynTests', n: syntests, color: 'var(--accent)' },
+    { label: 'Python Scripts', n: scripts, color: 'var(--amber)' },
+  ];
+  document.getElementById('status-bars').innerHTML = '';
+  document.getElementById('type-bars').innerHTML = types.map(t => `
+    <div class="prog-row">
+      <span class="prog-label">${t.label}</span>
+      <div class="prog-track"><div class="prog-fill" style="width:${t.n/total*100}%;background:${t.color}"></div></div>
+      <span class="prog-val" style="color:${t.color}">${t.n}</span>
+    </div>`).join('');
+
+  // Recent experiments
+  const recent = [...EXPERIMENTS].reverse().slice(0, 6);
+  document.getElementById('recent-exps').innerHTML = recent.map(e => buildExpCard(e, true)).join('');
+}
+
+// ── Experiment card ──
+function buildExpCard(e, truncate) {
+  const statusClass = e.status;
+  return `<div class="exp-card">
+    <div class="exp-card-header">
+      <span class="exp-id">${e.id}</span>
+      <span class="exp-name">${e.emoji || ''} ${e.name}</span>
+      <span class="status-badge ${statusClass}">${e.status}</span>
+    </div>
+    <div class="exp-result${truncate ? ' truncated' : ''}">${e.result}</div>
+    ${e.notes ? `<div class="exp-notes">${e.notes}</div>` : ''}
+    <div class="exp-footer">
+      <span class="exp-ts">${e.timestamp.replace('T', ' ').replace('Z','')}</span>
+      ${e.file ? `<a class="exp-link" href="${e.file}" target="_blank">Open App →</a>` : ''}
+    </div>
+  </div>`;
+}
+
+// ── Render experiments ──
+function renderExperiments() {
+  const filterStatus = document.getElementById('filter-status').value;
+  const query = document.getElementById('search-exp').value.toLowerCase();
+  const filtered = EXPERIMENTS.filter(e => {
+    if (filterStatus && e.status !== filterStatus) return false;
+    if (query && !e.name.toLowerCase().includes(query) && !e.result.toLowerCase().includes(query)) return false;
+    return true;
+  });
+  document.getElementById('all-exps').innerHTML = filtered.map(e => buildExpCard(e, false)).join('');
+}
+
+// ── Build timeline ──
+function buildTimeline() {
+  const root = document.getElementById('timeline-root');
+  root.innerHTML = [...EXPERIMENTS].reverse().map(e => `
+    <div class="tl-item">
+      <div class="tl-dot ${e.status}"></div>
+      <div class="tl-time">${e.timestamp.replace('T', ' ').replace('Z', ' UTC')}</div>
+      <div><span class="tl-id">${e.id}</span><span class="tl-name">${e.emoji || ''} ${e.name}</span></div>
+      <div class="tl-desc">${e.result.substring(0, 100)}${e.result.length > 100 ? '…' : ''}</div>
+    </div>`).join('');
+}
+
+// ── Render findings ──
+function renderFindings() {
+  // Simple markdown-lite renderer
+  const html = FINDINGS_MD
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, s => `<ul>${s}</ul>`)
+    .replace(/\n\n/g, '\n<br>\n')
+    .trim();
+  document.getElementById('findings-content').innerHTML = html;
+}
+
+// ── Render apps ──
+function renderApps() {
+  const apps = EXPERIMENTS.filter(e => e.file);
+  document.getElementById('apps-grid').innerHTML = apps.map(e => `
+    <div class="exp-card">
+      <div style="font-size:32px;margin-bottom:8px">${e.emoji || '🔧'}</div>
+      <div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px">${e.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.4">${e.desc || e.result.substring(0, 80)}</div>
+      <div class="exp-footer" style="margin-top:auto">
+        <span class="exp-id">${e.id}</span>
+        <a class="exp-link" href="${e.file}" target="_blank">Open App →</a>
+      </div>
+    </div>`).join('');
+}
+
+// ── Tabs ──
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `tab-${name}`));
+}
+
+// ── Init ──
+buildOverview();
+renderExperiments();
+buildTimeline();
+renderFindings();
+renderApps();
+</script>
+</body>
+</html>

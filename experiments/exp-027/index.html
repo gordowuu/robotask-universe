@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperDigest — Robotics Paper Summary Tool</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#252525;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;min-height:100vh}
+
+header{padding:20px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--accent)}
+
+.container{max-width:900px;margin:0 auto;padding:24px}
+
+/* Input */
+.input-section{margin-bottom:32px}
+.input-label{font-size:.85rem;font-weight:500;margin-bottom:8px}
+textarea{width:100%;padding:16px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:12px;font-size:.9rem;font-family:inherit;line-height:1.6;resize:vertical;min-height:120px;transition:border-color .2s}
+textarea:focus{border-color:var(--accent);outline:none}
+textarea::placeholder{color:#555}
+.input-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.btn{padding:8px 18px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:8px;cursor:pointer;font-size:.82rem;font-family:inherit;transition:all .15s}
+.btn:hover{border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#1a8aef}
+.btn-small{padding:5px 12px;font-size:.75rem}
+
+/* Result Card */
+.digest-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.card-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:16px}
+.card-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0}
+.card-header-text h2{font-size:1.1rem;font-weight:700;line-height:1.3;margin-bottom:4px}
+.card-header-text .meta{font-size:.75rem;color:var(--dim);display:flex;gap:12px;flex-wrap:wrap}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:500}
+.tag-method{background:rgba(41,151,255,.12);color:var(--accent)}
+.tag-domain{background:rgba(48,209,88,.12);color:var(--green)}
+.tag-task{background:rgba(191,90,242,.12);color:var(--purple)}
+
+.card-body{padding:20px 24px}
+.section{margin-bottom:20px}
+.section:last-child{margin-bottom:0}
+.section-title{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.section-content{font-size:.88rem;line-height:1.7;color:var(--dim)}
+.section-content ul{padding-left:20px;margin-top:4px}
+.section-content li{margin-bottom:4px}
+.section-content strong{color:var(--fg)}
+
+.relevance-bar{display:flex;align-items:center;gap:10px;margin-top:8px}
+.relevance-track{flex:1;height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.relevance-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.relevance-label{font-size:.78rem;font-weight:600;min-width:50px;text-align:right}
+
+.follow-up-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.follow-up{padding:8px 12px;background:rgba(255,255,255,.02);border-radius:8px;font-size:.82rem;color:var(--dim);border-left:3px solid var(--accent);cursor:pointer;transition:background .15s}
+.follow-up:hover{background:rgba(255,255,255,.05)}
+
+/* Examples */
+.examples{margin-top:16px}
+.example-btn{padding:6px 12px;border:1px dashed var(--border);background:transparent;color:var(--dim);border-radius:6px;cursor:pointer;font-size:.75rem;font-family:inherit;transition:all .15s;margin-right:6px;margin-bottom:6px}
+.example-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Print */
+.card-actions{padding:12px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📄 <span>PaperDigest</span></h1>
+  <div style="font-size:.78rem;color:var(--dim)">Robotics Paper Summary Generator</div>
+</header>
+
+<div class="container">
+  <div class="input-section">
+    <div class="input-label">Paste a paper title and/or abstract:</div>
+    <textarea id="paperInput" placeholder="Example: 'RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control. We study how vision-language models trained on Internet-scale data can be incorporated directly into end-to-end robotic control...'" rows="5"></textarea>
+    <div class="input-actions">
+      <button class="btn btn-primary" onclick="digestPaper()">🔍 Generate Digest</button>
+      <button class="btn" onclick="clearAll()">Clear</button>
+      <span style="font-size:.75rem;color:var(--dim);margin-left:8px">No API needed — local keyword extraction + template matching</span>
+    </div>
+    <div class="examples">
+      <span style="font-size:.75rem;color:var(--dim)">Try examples: </span>
+      <button class="example-btn" onclick="loadExample(0)">RT-2 (VLA)</button>
+      <button class="example-btn" onclick="loadExample(1)">Diffusion Policy</button>
+      <button class="example-btn" onclick="loadExample(2)">ACT (Action Chunking)</button>
+      <button class="example-btn" onclick="loadExample(3)">DROID Dataset</button>
+      <button class="example-btn" onclick="loadExample(4)">Cosmos World Model</button>
+    </div>
+  </div>
+  <div id="results"></div>
+</div>
+
+<script>
+/* ═══ Example Papers ═══ */
+const EXAMPLES = [
+  {
+    text: `RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control
+
+We study how vision-language models trained on Internet-scale data can be incorporated directly into end-to-end robotic control to boost generalization and enable emergent semantic reasoning. We develop a method to co-fine-tune state-of-the-art vision-language models on both robotic trajectory data and Internet-scale vision-language tasks. The resulting model, RT-2, is a novel vision-language-action (VLA) model that shows improved generalization capabilities and emergent semantic reasoning — reasoning about previously unseen objects, interpreting new commands, and performing rudimentary reasoning in response to user commands. We demonstrate that RT-2 exhibits improved performance on a variety of robotic tasks and exhibits emergent capabilities, including reasoning about object categories and high-level descriptions.`
+  },
+  {
+    text: `Diffusion Policy: Visuomotor Policy Learning via Action Diffusion
+
+This paper introduces Diffusion Policy, a new way of generating robot behavior by representing a robot's visuomotor policy as a conditional denoising diffusion process. We benchmark Diffusion Policy across 12 different tasks from 4 different robot manipulation benchmarks, and find that it consistently outperforms existing state-of-the-art robot learning methods with an average improvement of 46.9%. Key advantages include expressing multimodal action distributions, being suitable for high-dimensional action spaces, and exhibiting impressive training stability. Our method uses a diffusion model to iteratively denoise random action sequences into the desired action trajectory conditioned on observations.`
+  },
+  {
+    text: `Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware (ACT)
+
+Fine-grained manipulation tasks, such as threading a zip tie or plugging in a charger, are notoriously difficult for robots. We present Action Chunking with Transformers (ACT), an imitation learning algorithm that learns to predict target joint positions for the next several timesteps given the current observation. By representing the policy in terms of action chunks — sequences of actions — we can effectively handle the high-frequency control required for precise manipulation. We demonstrate that ACT enables a low-cost bimanual robot system to perform 6 challenging fine-grained manipulation tasks with 80-96% success rates from just 50 human demonstrations per task.`
+  },
+  {
+    text: `DROID: A Large-Scale In-The-Wild Robot Manipulation Dataset
+
+We present DROID (Distributed Robot Interaction Dataset), a diverse robot manipulation dataset with 76k demonstration trajectories collected across 564 scenes and 86 tasks, spanning kitchen, office, and workshop environments. DROID uses a standardized hardware setup of a Franka Emika Panda arm with two external cameras and a wrist camera. Policies trained on DROID exhibit significantly improved generalization across scenes and tasks compared to smaller-scale datasets. We demonstrate that scaling robot data collection leads to better generalization, with cross-embodiment transfer learning improving performance by 20% over training from scratch.`
+  },
+  {
+    text: `Cosmos World Foundation Model Platform for Physical AI
+
+We introduce Cosmos, a platform of state-of-the-art generative world foundation models, trained on a large amount of curated videos and images, that generates world simulations through Visual Generation. These models can understand and generate physically plausible worlds, enabling a variety of Physical AI applications including synthetic data generation for robotics, autonomous vehicles, and embodied AI agents. Cosmos models support video-to-video transfer, text-to-video generation, and action-conditioned world simulation. We demonstrate applications in robot manipulation data augmentation, achieving significant improvements in policy performance through synthetic data.`
+  }
+];
+
+/* ═══ Keyword Dictionaries ═══ */
+const METHOD_KEYWORDS = {
+  'transformer': ['transformer', 'attention', 'self-attention', 'multi-head'],
+  'diffusion': ['diffusion', 'denoising', 'ddpm', 'score-based'],
+  'reinforcement learning': ['reinforcement learning', 'rl', 'reward', 'policy gradient', 'ppo', 'sac'],
+  'imitation learning': ['imitation', 'demonstration', 'behavior cloning', 'il'],
+  'vision-language': ['vision-language', 'vlm', 'vla', 'multimodal', 'clip'],
+  'generative model': ['generative', 'generation', 'gan', 'vae', 'autoregressive'],
+  'contrastive learning': ['contrastive', 'self-supervised', 'ssl'],
+  'world model': ['world model', 'world foundation', 'dynamics model', 'predictive'],
+  'foundation model': ['foundation model', 'pretrained', 'pre-trained', 'fine-tune', 'fine-tuning'],
+  'sim-to-real': ['sim-to-real', 'simulation', 'synthetic', 'domain adaptation', 'transfer'],
+};
+
+const DOMAIN_KEYWORDS = {
+  'manipulation': ['manipulation', 'grasping', 'pick', 'place', 'grasp', 'gripper', 'bimanual'],
+  'navigation': ['navigation', 'locomotion', 'walking', 'path planning'],
+  'autonomous driving': ['autonomous driving', 'self-driving', 'vehicle', 'driving'],
+  'embodied AI': ['embodied', 'agent', 'embodied ai'],
+  'data augmentation': ['augmentation', 'synthetic data', 'data generation'],
+  'computer vision': ['vision', 'visual', 'image', 'video', 'perception'],
+  'policy learning': ['policy', 'control', 'action', 'visuomotor'],
+};
+
+const TASK_KEYWORDS = {
+  'pick-and-place': ['pick and place', 'pick-and-place', 'picking', 'placing'],
+  'dexterous manipulation': ['fine-grained', 'dexterous', 'precise', 'threading', 'insertion'],
+  'object detection': ['detection', 'segmentation', 'recognition'],
+  'trajectory prediction': ['trajectory', 'path', 'motion planning', 'waypoint'],
+  'video generation': ['video generation', 'video synthesis', 'text-to-video', 'video-to-video'],
+  'data collection': ['dataset', 'data collection', 'demonstration collection', 'teleoperation'],
+  'generalization': ['generalization', 'transfer', 'zero-shot', 'few-shot', 'emergent'],
+};
+
+/* ═══ Analysis Engine ═══ */
+function analyzePaper(text) {
+  const lower = text.toLowerCase();
+  const words = lower.split(/\s+/);
+  
+  // Extract title (first line or first sentence)
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  const title = lines[0].length < 200 ? lines[0].trim() : text.split('.')[0].trim();
+  const abstract = lines.length > 1 ? lines.slice(1).join(' ').trim() : text.trim();
+  
+  // Detect methods
+  const methods = [];
+  for(const [method, kws] of Object.entries(METHOD_KEYWORDS)) {
+    const score = kws.reduce((s, kw) => s + (lower.includes(kw) ? 1 : 0), 0);
+    if(score > 0) methods.push({ name: method, score });
+  }
+  methods.sort((a, b) => b.score - a.score);
+  
+  // Detect domains
+  const domains = [];
+  for(const [domain, kws] of Object.entries(DOMAIN_KEYWORDS)) {
+    const score = kws.reduce((s, kw) => s + (lower.includes(kw) ? 1 : 0), 0);
+    if(score > 0) domains.push({ name: domain, score });
+  }
+  domains.sort((a, b) => b.score - a.score);
+  
+  // Detect tasks
+  const tasks = [];
+  for(const [task, kws] of Object.entries(TASK_KEYWORDS)) {
+    const score = kws.reduce((s, kw) => s + (lower.includes(kw) ? 1 : 0), 0);
+    if(score > 0) tasks.push({ name: task, score });
+  }
+  tasks.sort((a, b) => b.score - a.score);
+  
+  // Extract numbers/results
+  const numbers = [];
+  const numPatterns = [
+    /(\d+(?:\.\d+)?)\s*%/g,
+    /(\d+)k?\s*(?:demonstrations?|trajectories|episodes|scenes|tasks)/gi,
+    /(\d+(?:\.\d+)?)\s*(?:success rate|improvement|performance)/gi,
+  ];
+  numPatterns.forEach(pat => {
+    let m;
+    while((m = pat.exec(text)) !== null) {
+      numbers.push(m[0]);
+    }
+  });
+  
+  // Extract key sentences (those with "we" + strong verbs)
+  const sentences = abstract.split(/(?<=[.!?])\s+/);
+  const keySentences = sentences.filter(s => {
+    const sl = s.toLowerCase();
+    return (sl.includes('we ') || sl.includes('our ')) && 
+           (sl.includes('propose') || sl.includes('introduce') || sl.includes('present') || 
+            sl.includes('demonstrate') || sl.includes('show') || sl.includes('develop') ||
+            sl.includes('achieve') || sl.includes('outperform'));
+  });
+  
+  // Relevance to robot manipulation
+  const manipRelevance = computeRelevance(lower, [
+    'robot', 'manipulation', 'gripper', 'grasp', 'pick', 'place', 'arm',
+    'control', 'policy', 'action', 'trajectory', 'imitation', 'demonstration',
+    'real-world', 'hardware', 'physical', 'embodied', 'visuomotor'
+  ]);
+  
+  // Generate limitations
+  const limitations = generateLimitations(lower, methods, domains);
+  
+  // Generate follow-up questions
+  const followUps = generateFollowUps(lower, methods, domains, tasks);
+  
+  return {
+    title,
+    methods: methods.slice(0, 3),
+    domains: domains.slice(0, 3),
+    tasks: tasks.slice(0, 3),
+    keySentences,
+    numbers: [...new Set(numbers)].slice(0, 6),
+    manipRelevance,
+    limitations,
+    followUps,
+    wordCount: words.length
+  };
+}
+
+function computeRelevance(text, keywords) {
+  const hits = keywords.filter(kw => text.includes(kw)).length;
+  return Math.min(100, Math.round(hits / keywords.length * 100 * 1.5));
+}
+
+function generateLimitations(text, methods, domains) {
+  const lims = [];
+  if(!text.includes('real-world') && !text.includes('real world') && !text.includes('hardware'))
+    lims.push('No real-world hardware validation mentioned');
+  if(!text.includes('generalize') && !text.includes('generalization'))
+    lims.push('Generalization across environments/tasks not discussed');
+  if(text.includes('simulation') && !text.includes('real'))
+    lims.push('Results primarily in simulation — sim-to-real gap may apply');
+  if(!text.includes('latency') && !text.includes('real-time') && !text.includes('inference time'))
+    lims.push('Inference speed/latency not addressed');
+  if(!text.includes('safety') && !text.includes('safe'))
+    lims.push('Safety considerations not discussed');
+  if(text.includes('50 ') || text.includes('small'))
+    lims.push('Relatively small training data size — scalability unclear');
+  if(lims.length === 0) lims.push('Further analysis needed for limitations assessment');
+  return lims.slice(0, 4);
+}
+
+function generateFollowUps(text, methods, domains, tasks) {
+  const qs = [];
+  if(methods.some(m => m.name === 'diffusion'))
+    qs.push('How does inference latency of the diffusion process affect real-time control?');
+  if(methods.some(m => m.name === 'vision-language'))
+    qs.push('Can the VLM backbone be swapped for newer models (GPT-4V, Gemini) with better results?');
+  if(domains.some(d => d.name === 'manipulation'))
+    qs.push('How does this approach handle deformable objects or transparent surfaces?');
+  if(tasks.some(t => t.name === 'data collection'))
+    qs.push('What is the marginal value of additional data — is there a saturation point?');
+  if(text.includes('synthetic') || text.includes('augment'))
+    qs.push('How sensitive is performance to the fidelity of synthetic data generation?');
+  qs.push('Could this be combined with our Cosmos Transfer pipeline for data augmentation?');
+  qs.push('What modifications would be needed to deploy on our WidowX 250s hardware?');
+  return qs.slice(0, 5);
+}
+
+/* ═══ Rendering ═══ */
+function digestPaper() {
+  const text = document.getElementById('paperInput').value.trim();
+  if(!text) return;
+  
+  const analysis = analyzePaper(text);
+  const el = document.getElementById('results');
+  
+  const methodTags = analysis.methods.map(m => `<span class="tag tag-method">${m.name}</span>`).join(' ');
+  const domainTags = analysis.domains.map(d => `<span class="tag tag-domain">${d.name}</span>`).join(' ');
+  const taskTags = analysis.tasks.map(t => `<span class="tag tag-task">${t.name}</span>`).join(' ');
+  
+  const relColor = analysis.manipRelevance > 70 ? 'var(--green)' : analysis.manipRelevance > 40 ? 'var(--yellow)' : 'var(--red)';
+  const relLabel = analysis.manipRelevance > 70 ? 'Highly Relevant' : analysis.manipRelevance > 40 ? 'Moderately Relevant' : 'Low Relevance';
+  
+  const contribution = analysis.keySentences.length > 0 
+    ? analysis.keySentences.slice(0, 2).join(' ') 
+    : 'Key contribution could not be automatically extracted — review abstract manually.';
+  
+  const resultsHtml = analysis.numbers.length > 0 
+    ? `<ul>${analysis.numbers.map(n => `<li><strong>${n}</strong></li>`).join('')}</ul>` 
+    : '<em>No quantitative results automatically detected.</em>';
+  
+  const card = `
+  <div class="digest-card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(41,151,255,.1)">📄</div>
+      <div class="card-header-text">
+        <h2>${escapeHtml(analysis.title)}</h2>
+        <div class="meta">
+          <span>${analysis.wordCount} words</span>
+          ${methodTags} ${domainTags} ${taskTags}
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="section">
+        <div class="section-title">💡 Key Contribution</div>
+        <div class="section-content">${escapeHtml(contribution)}</div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">⚙️ Method</div>
+        <div class="section-content">
+          <strong>Primary approach:</strong> ${analysis.methods.length ? analysis.methods.map(m=>m.name).join(', ') : 'Not classified'}
+          <br><strong>Domain:</strong> ${analysis.domains.length ? analysis.domains.map(d=>d.name).join(', ') : 'General'}
+          <br><strong>Tasks:</strong> ${analysis.tasks.length ? analysis.tasks.map(t=>t.name).join(', ') : 'Not specified'}
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">📊 Key Results</div>
+        <div class="section-content">${resultsHtml}</div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">🎯 Relevance to Robot Manipulation</div>
+        <div class="section-content">
+          <div class="relevance-bar">
+            <div class="relevance-track">
+              <div class="relevance-fill" style="width:${analysis.manipRelevance}%;background:${relColor}"></div>
+            </div>
+            <div class="relevance-label" style="color:${relColor}">${analysis.manipRelevance}%</div>
+          </div>
+          <div style="font-size:.78rem;color:var(--dim);margin-top:4px">${relLabel} — ${analysis.manipRelevance > 70 ? 'Directly applicable to our robot manipulation pipeline' : analysis.manipRelevance > 40 ? 'Contains transferable ideas for manipulation tasks' : 'Limited direct applicability but may inform broader approach'}</div>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">⚠️ Limitations</div>
+        <div class="section-content">
+          <ul>${analysis.limitations.map(l => `<li>${l}</li>`).join('')}</ul>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">❓ Follow-up Questions</div>
+        <div class="follow-up-list">
+          ${analysis.followUps.map(q => `<div class="follow-up">${q}</div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="card-actions">
+      <button class="btn btn-small" onclick="copyDigest(this)">📋 Copy Summary</button>
+      <button class="btn btn-small" onclick="downloadDigest()">⬇ Download</button>
+    </div>
+  </div>`;
+  
+  el.innerHTML = card + el.innerHTML;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function loadExample(i) {
+  document.getElementById('paperInput').value = EXAMPLES[i].text;
+}
+
+function clearAll() {
+  document.getElementById('paperInput').value = '';
+  document.getElementById('results').innerHTML = '';
+}
+
+function copyDigest(btn) {
+  const card = btn.closest('.digest-card');
+  const text = card.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Summary', 1500);
+  });
+}
+
+function downloadDigest() {
+  const results = document.getElementById('results');
+  const text = results.innerText;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'paper-digest.txt';
+  a.click();
+}
+
+/* ═══ Keyboard shortcut ═══ */
+document.getElementById('paperInput').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    digestPaper();
+  }
+});
+</script>
+</body>
+</html>

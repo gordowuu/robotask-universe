@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AnnotationStudio — Robot Frame Annotation Tool</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d0d0d;--surface:#161616;--border:#2a2a2a;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* ═══ Header ═══ */
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10}
+header h1{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--accent)}
+.header-actions{display:flex;gap:8px;align-items:center}
+
+/* ═══ Toolbar ═══ */
+.toolbar{display:flex;align-items:center;gap:2px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.tool-btn{padding:6px 12px;border:none;background:transparent;color:var(--dim);font-size:.8rem;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;font-family:inherit}
+.tool-btn:hover{background:rgba(255,255,255,.06);color:var(--fg)}
+.tool-btn.active{background:var(--accent);color:#fff}
+.tool-btn .icon{font-size:1rem}
+.separator{width:1px;height:20px;background:var(--border);margin:0 6px}
+.label-select{padding:5px 10px;border:1px solid var(--border);background:var(--surface);color:var(--fg);border-radius:6px;font-size:.8rem;cursor:pointer;font-family:inherit}
+.label-select:focus{border-color:var(--accent);outline:none}
+
+/* ═══ Main Layout ═══ */
+.main{flex:1;display:flex;overflow:hidden}
+.canvas-area{flex:1;position:relative;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
+.canvas-wrapper{position:relative;display:inline-block}
+#annotCanvas{cursor:crosshair;display:block}
+.canvas-wrapper video{display:none}
+
+/* ═══ Sidebar ═══ */
+.sidebar{width:300px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.sidebar-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.85rem;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+.sidebar-header .count{color:var(--accent);font-weight:400}
+.annotation-list{flex:1;overflow-y:auto;padding:8px}
+.annotation-list::-webkit-scrollbar{width:6px}
+.annotation-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.anno-item{padding:10px 12px;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:background .15s;border:1px solid transparent;display:flex;gap:10px;align-items:flex-start}
+.anno-item:hover{background:rgba(255,255,255,.04)}
+.anno-item.selected{border-color:var(--accent);background:rgba(41,151,255,.08)}
+.anno-color{width:12px;height:12px;border-radius:3px;flex-shrink:0;margin-top:3px}
+.anno-info{flex:1;min-width:0}
+.anno-label{font-size:.82rem;font-weight:500}
+.anno-meta{font-size:.7rem;color:var(--dim);margin-top:2px}
+.anno-actions{display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.anno-item:hover .anno-actions{opacity:1}
+.anno-act-btn{width:22px;height:22px;border:none;background:rgba(255,255,255,.06);color:var(--dim);border-radius:4px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center}
+.anno-act-btn:hover{background:rgba(255,255,255,.12);color:var(--fg)}
+.anno-act-btn.del:hover{color:var(--red)}
+
+/* ═══ Video Controls ═══ */
+.video-controls{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.vc-btn{padding:6px 10px;border:none;background:rgba(255,255,255,.06);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .15s;font-family:inherit}
+.vc-btn:hover{background:rgba(255,255,255,.12)}
+.vc-btn.primary{background:var(--accent);color:#fff}
+.vc-btn.primary:hover{background:#1a8aef}
+.scrubber{flex:1;-webkit-appearance:none;height:4px;background:#333;border-radius:2px;outline:none;cursor:pointer}
+.scrubber::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer}
+.time-display{font-size:.75rem;color:var(--dim);font-variant-numeric:tabular-nums;min-width:80px;text-align:center}
+
+/* ═══ Buttons ═══ */
+.btn{padding:6px 14px;border:1px solid var(--border);background:var(--surface);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.78rem;transition:all .15s;font-family:inherit}
+.btn:hover{border-color:var(--accent);background:rgba(41,151,255,.08)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#1a8aef}
+
+/* ═══ Drop Zone ═══ */
+.drop-zone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:5;background:rgba(0,0,0,.85)}
+.drop-zone.hidden{display:none}
+.drop-icon{font-size:4rem;opacity:.4}
+.drop-text{font-size:1.2rem;font-weight:500}
+.drop-sub{font-size:.85rem;color:var(--dim)}
+.drop-zone input[type=file]{display:none}
+.drop-btn{padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-family:inherit}
+.drop-btn:hover{background:#1a8aef}
+
+/* ═══ Label Editor Modal ═══ */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:center;justify-content:center}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:400px;max-width:90vw}
+.modal h3{font-size:1rem;margin-bottom:16px}
+.modal label{font-size:.82rem;color:var(--dim);display:block;margin-bottom:4px;margin-top:12px}
+.modal input,.modal select,.modal textarea{width:100%;padding:8px 12px;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:6px;font-size:.85rem;font-family:inherit}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:var(--accent);outline:none}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+
+/* ═══ Crosshair ═══ */
+.crosshair-h,.crosshair-v{position:absolute;pointer-events:none;background:rgba(41,151,255,.3);z-index:3}
+.crosshair-h{height:1px;left:0;right:0}
+.crosshair-v{width:1px;top:0;bottom:0}
+
+/* ═══ Export Preview ═══ */
+.export-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;display:flex;align-items:center;justify-content:center}
+.export-overlay.hidden{display:none}
+.export-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:600px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column}
+.export-box h3{margin-bottom:12px;font-size:1rem}
+.export-box pre{flex:1;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:.75rem;color:var(--accent);line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:50vh}
+.export-box .modal-actions{margin-top:16px}
+
+/* ═══ Coord Display ═══ */
+.coord-display{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.7);padding:4px 8px;border-radius:4px;font-size:.7rem;color:var(--dim);z-index:4;font-variant-numeric:tabular-nums}
+
+/* ═══ Tooltip ═══ */
+.tooltip{position:absolute;background:rgba(0,0,0,.85);color:var(--fg);font-size:.72rem;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:10;white-space:nowrap;transform:translate(-50%,-100%);margin-top:-6px}
+
+/* ═══ Kbd ═══ */
+.kbd-bar{display:flex;gap:12px;padding:6px 16px;background:rgba(255,255,255,.02);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.kbd-hint{font-size:.68rem;color:var(--dim)}
+.kbd-hint kbd{display:inline-block;padding:1px 5px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:3px;font-size:.65rem;font-family:inherit;margin:0 2px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎯 <span>AnnotationStudio</span></h1>
+  <div class="header-actions">
+    <button class="btn" onclick="exportCOCO()">Export COCO JSON</button>
+    <button class="btn" onclick="exportSimple()">Export Simple JSON</button>
+    <button class="btn" onclick="clearAll()">Clear All</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="tool-btn active" data-tool="bbox" onclick="setTool('bbox')"><span class="icon">▢</span> BBox</button>
+  <button class="tool-btn" data-tool="point" onclick="setTool('point')"><span class="icon">⊙</span> Point</button>
+  <button class="tool-btn" data-tool="polygon" onclick="setTool('polygon')"><span class="icon">⬡</span> Polygon</button>
+  <button class="tool-btn" data-tool="select" onclick="setTool('select')"><span class="icon">↖</span> Select</button>
+  <div class="separator"></div>
+  <span style="font-size:.78rem;color:var(--dim)">Label:</span>
+  <select class="label-select" id="labelSelect">
+    <option value="gripper" data-color="#2997ff">🤖 Gripper</option>
+    <option value="object" data-color="#30d158">📦 Object</option>
+    <option value="target_zone" data-color="#ff9f0a">🎯 Target Zone</option>
+    <option value="obstacle" data-color="#ff453a">🚫 Obstacle</option>
+    <option value="workspace" data-color="#bf5af2">🔲 Workspace</option>
+    <option value="custom" data-color="#ffd60a">✏️ Custom...</option>
+  </select>
+  <div class="separator"></div>
+  <button class="tool-btn" onclick="undoLast()" title="Undo (Ctrl+Z)"><span class="icon">↩</span> Undo</button>
+</div>
+
+<div class="main">
+  <div class="canvas-area" id="canvasArea">
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-icon">📹</div>
+      <div class="drop-text">Drop a video or image here</div>
+      <div class="drop-sub">Or click to browse. Supports MP4, WebM, PNG, JPG.</div>
+      <button class="drop-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+      <input type="file" id="fileInput" accept="video/*,image/*">
+      <div style="margin-top:20px;color:var(--dim);font-size:.8rem">— or try with a demo frame —</div>
+      <button class="drop-btn" style="background:var(--purple);margin-top:8px" onclick="loadDemoFrame()">Load Demo Frame</button>
+    </div>
+    <div class="canvas-wrapper" id="canvasWrapper" style="display:none">
+      <canvas id="annotCanvas"></canvas>
+      <video id="srcVideo" muted playsinline></video>
+      <div class="crosshair-h" id="crossH" style="display:none"></div>
+      <div class="crosshair-v" id="crossV" style="display:none"></div>
+      <div class="coord-display" id="coordDisplay">0, 0</div>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      Annotations <span class="count" id="annoCount">0</span>
+    </div>
+    <div class="annotation-list" id="annoList"></div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <div style="font-size:.75rem;color:var(--dim);margin-bottom:8px">Frame Info</div>
+      <div style="font-size:.78rem;font-variant-numeric:tabular-nums" id="frameInfo">No media loaded</div>
+    </div>
+  </div>
+</div>
+
+<div class="video-controls" id="videoControls" style="display:none">
+  <button class="vc-btn" id="playBtn" onclick="togglePlay()">▶</button>
+  <button class="vc-btn" onclick="stepFrame(-1)">◀ -1f</button>
+  <button class="vc-btn" onclick="stepFrame(1)">+1f ▶</button>
+  <input type="range" class="scrubber" id="scrubber" min="0" max="1000" value="0" oninput="seekTo(this.value/1000)">
+  <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+  <button class="vc-btn" onclick="captureFrame()">📸 Capture Frame</button>
+</div>
+
+<div class="kbd-bar">
+  <span class="kbd-hint"><kbd>B</kbd> BBox</span>
+  <span class="kbd-hint"><kbd>P</kbd> Point</span>
+  <span class="kbd-hint"><kbd>G</kbd> Polygon</span>
+  <span class="kbd-hint"><kbd>V</kbd> Select</span>
+  <span class="kbd-hint"><kbd>Del</kbd> Delete selected</span>
+  <span class="kbd-hint"><kbd>Ctrl+Z</kbd> Undo</span>
+  <span class="kbd-hint"><kbd>Ctrl+E</kbd> Export</span>
+  <span class="kbd-hint"><kbd>Space</kbd> Play/Pause</span>
+  <span class="kbd-hint"><kbd>,</kbd><kbd>.</kbd> Frame step</span>
+</div>
+
+<!-- Export overlay -->
+<div class="export-overlay hidden" id="exportOverlay" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="export-box">
+    <h3 id="exportTitle">Export</h3>
+    <pre id="exportPre"></pre>
+    <div class="modal-actions">
+      <button class="btn" onclick="copyExport()">📋 Copy</button>
+      <button class="btn" onclick="downloadExport()">⬇ Download</button>
+      <button class="btn" onclick="document.getElementById('exportOverlay').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══ State ═══ */
+let annotations = [];
+let currentTool = 'bbox';
+let selectedIdx = -1;
+let drawing = false;
+let drawStart = null;
+let polygonPoints = [];
+let imgData = null; // {img: HTMLImageElement|HTMLCanvasElement, w, h}
+let isVideo = false;
+let undoStack = [];
+let exportData = '';
+let exportFilename = '';
+
+const LABEL_COLORS = {
+  gripper:'#2997ff', object:'#30d158', target_zone:'#ff9f0a',
+  obstacle:'#ff453a', workspace:'#bf5af2', custom:'#ffd60a'
+};
+
+const canvas = document.getElementById('annotCanvas');
+const ctx = canvas.getContext('2d');
+const video = document.getElementById('srcVideo');
+const wrapper = document.getElementById('canvasWrapper');
+const dropZone = document.getElementById('dropZone');
+const crossH = document.getElementById('crossH');
+const crossV = document.getElementById('crossV');
+const coordDisplay = document.getElementById('coordDisplay');
+
+/* ═══ File Loading ═══ */
+document.getElementById('fileInput').addEventListener('change', e => {
+  if(e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+const canvasArea = document.getElementById('canvasArea');
+canvasArea.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; });
+canvasArea.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+canvasArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.borderColor = '';
+  if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  if(file.type.startsWith('video/')) {
+    isVideo = true;
+    video.src = url;
+    video.onloadeddata = () => {
+      video.pause();
+      video.currentTime = 0;
+      setTimeout(() => captureVideoFrame(), 100);
+      document.getElementById('videoControls').style.display = 'flex';
+    };
+  } else {
+    isVideo = false;
+    const img = new Image();
+    img.onload = () => {
+      imgData = { el: img, w: img.naturalWidth, h: img.naturalHeight };
+      setupCanvas();
+    };
+    img.src = url;
+    document.getElementById('videoControls').style.display = 'none';
+  }
+  dropZone.classList.add('hidden');
+  wrapper.style.display = 'inline-block';
+}
+
+function loadDemoFrame() {
+  // Generate a synthetic robot workspace frame
+  isVideo = false;
+  const dw = 640, dh = 480;
+  const off = document.createElement('canvas');
+  off.width = dw; off.height = dh;
+  const dx = off.getContext('2d');
+  
+  // Background - workspace table
+  dx.fillStyle = '#1a1a2e';
+  dx.fillRect(0, 0, dw, dh);
+  
+  // Table surface
+  dx.fillStyle = '#2d2d44';
+  dx.fillRect(40, 200, 560, 260);
+  dx.strokeStyle = '#3d3d55';
+  dx.lineWidth = 2;
+  dx.strokeRect(40, 200, 560, 260);
+  
+  // Grid on table
+  dx.strokeStyle = 'rgba(255,255,255,.05)';
+  dx.lineWidth = 1;
+  for(let x = 80; x < 600; x += 40) {
+    dx.beginPath(); dx.moveTo(x, 200); dx.lineTo(x, 460); dx.stroke();
+  }
+  for(let y = 240; y < 460; y += 40) {
+    dx.beginPath(); dx.moveTo(40, y); dx.lineTo(600, y); dx.stroke();
+  }
+  
+  // Objects on table
+  // Red cube
+  dx.fillStyle = '#e74c3c';
+  dx.fillRect(150, 300, 50, 50);
+  dx.fillStyle = '#c0392b';
+  dx.fillRect(150, 300, 50, 8);
+  
+  // Green cylinder (approx)
+  dx.fillStyle = '#27ae60';
+  dx.beginPath(); dx.ellipse(350, 360, 25, 12, 0, 0, Math.PI*2); dx.fill();
+  dx.fillRect(325, 320, 50, 40);
+  dx.fillStyle = '#2ecc71';
+  dx.beginPath(); dx.ellipse(350, 320, 25, 12, 0, 0, Math.PI*2); dx.fill();
+  
+  // Blue sphere
+  const sg = dx.createRadialGradient(480, 340, 5, 480, 340, 25);
+  sg.addColorStop(0, '#5dade2'); sg.addColorStop(1, '#2e86c1');
+  dx.fillStyle = sg;
+  dx.beginPath(); dx.arc(480, 340, 25, 0, Math.PI*2); dx.fill();
+  
+  // Robot arm (simplified)
+  dx.strokeStyle = '#95a5a6';
+  dx.lineWidth = 8;
+  dx.lineCap = 'round';
+  dx.beginPath(); dx.moveTo(320, 100); dx.lineTo(280, 200); dx.lineTo(250, 280); dx.stroke();
+  
+  // Gripper
+  dx.lineWidth = 4;
+  dx.strokeStyle = '#bdc3c7';
+  dx.beginPath(); dx.moveTo(250, 280); dx.lineTo(235, 310); dx.stroke();
+  dx.beginPath(); dx.moveTo(250, 280); dx.lineTo(265, 310); dx.stroke();
+  
+  // Joint circles
+  dx.fillStyle = '#7f8c8d';
+  [{ x:320, y:100 }, { x:280, y:200 }, { x:250, y:280 }].forEach(p => {
+    dx.beginPath(); dx.arc(p.x, p.y, 6, 0, Math.PI*2); dx.fill();
+  });
+  
+  // Target zone (dashed)
+  dx.setLineDash([6, 4]);
+  dx.strokeStyle = '#f39c12';
+  dx.lineWidth = 2;
+  dx.strokeRect(420, 380, 100, 60);
+  dx.setLineDash([]);
+  
+  // Camera label
+  dx.fillStyle = 'rgba(255,255,255,.5)';
+  dx.font = '11px monospace';
+  dx.fillText('cam_high_0  |  frame 0042  |  640×480', 10, 18);
+  
+  imgData = { el: off, w: dw, h: dh };
+  setupCanvas();
+  dropZone.classList.add('hidden');
+  wrapper.style.display = 'inline-block';
+  document.getElementById('videoControls').style.display = 'none';
+  document.getElementById('frameInfo').textContent = `Demo frame · 640×480 · RGB`;
+}
+
+function captureVideoFrame() {
+  const off = document.createElement('canvas');
+  off.width = video.videoWidth;
+  off.height = video.videoHeight;
+  off.getContext('2d').drawImage(video, 0, 0);
+  imgData = { el: off, w: off.width, h: off.height };
+  setupCanvas();
+  updateTimeDisplay();
+  document.getElementById('frameInfo').textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.currentTime)}/${formatTime(video.duration)}`;
+}
+
+function setupCanvas() {
+  const area = canvasArea.getBoundingClientRect();
+  const maxW = area.width - 320, maxH = area.height - 20;
+  const scale = Math.min(maxW / imgData.w, maxH / imgData.h, 1);
+  canvas.width = imgData.w * scale;
+  canvas.height = imgData.h * scale;
+  canvas._scale = scale;
+  render();
+}
+
+/* ═══ Rendering ═══ */
+function render() {
+  if(!imgData) return;
+  const s = canvas._scale || 1;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(imgData.el, 0, 0, canvas.width, canvas.height);
+  
+  // Draw annotations
+  annotations.forEach((a, i) => {
+    const color = LABEL_COLORS[a.label] || '#ffd60a';
+    const sel = i === selectedIdx;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = sel ? 2.5 : 1.5;
+    ctx.fillStyle = color.replace(')', ',.15)').replace('rgb', 'rgba').replace('#', '');
+    // Convert hex to rgba for fill
+    const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+    ctx.fillStyle = `rgba(${r},${g},${b},${sel?.15:.08})`;
+    
+    if(a.type === 'bbox') {
+      const x = a.x*s, y = a.y*s, w = a.w*s, h = a.h*s;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      // Label tag
+      drawLabel(ctx, a.label, x, y - 4, color, sel);
+      // Resize handles when selected
+      if(sel) drawHandles(x, y, w, h, color);
+    } else if(a.type === 'point') {
+      const x = a.x*s, y = a.y*s;
+      ctx.beginPath(); ctx.arc(x, y, sel?8:6, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${r},${g},${b},.4)`;
+      ctx.fill(); ctx.stroke();
+      // Crosshair
+      ctx.strokeStyle = `rgba(${r},${g},${b},.3)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x-15, y); ctx.lineTo(x+15, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y-15); ctx.lineTo(x, y+15); ctx.stroke();
+      drawLabel(ctx, a.label, x + 10, y - 10, color, sel);
+    } else if(a.type === 'polygon') {
+      if(a.points.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(a.points[0].x*s, a.points[0].y*s);
+      for(let j = 1; j < a.points.length; j++) ctx.lineTo(a.points[j].x*s, a.points[j].y*s);
+      if(a.closed) ctx.closePath();
+      ctx.fillStyle = `rgba(${r},${g},${b},.12)`;
+      ctx.fill(); ctx.stroke();
+      // Draw vertices
+      a.points.forEach(p => {
+        ctx.beginPath(); ctx.arc(p.x*s, p.y*s, 3, 0, Math.PI*2);
+        ctx.fillStyle = color; ctx.fill();
+      });
+      drawLabel(ctx, a.label, a.points[0].x*s, a.points[0].y*s - 8, color, sel);
+    }
+  });
+  
+  // Draw in-progress polygon
+  if(currentTool === 'polygon' && polygonPoints.length > 0) {
+    const color = getLabelColor();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(polygonPoints[0].x * canvas._scale, polygonPoints[0].y * canvas._scale);
+    for(let i = 1; i < polygonPoints.length; i++)
+      ctx.lineTo(polygonPoints[i].x * canvas._scale, polygonPoints[i].y * canvas._scale);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    polygonPoints.forEach(p => {
+      ctx.beginPath(); ctx.arc(p.x * canvas._scale, p.y * canvas._scale, 3, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    });
+  }
+  
+  // Draw in-progress bbox
+  if(drawing && currentTool === 'bbox' && drawStart) {
+    const color = getLabelColor();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(drawStart.sx, drawStart.sy, drawStart.ex - drawStart.sx, drawStart.ey - drawStart.sy);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawLabel(ctx, label, x, y, color, sel) {
+  ctx.font = `${sel?'bold ':' '}11px -apple-system,sans-serif`;
+  const text = label.replace('_', ' ');
+  const tw = ctx.measureText(text).width;
+  const pad = 4;
+  ctx.fillStyle = 'rgba(0,0,0,.7)';
+  ctx.fillRect(x, y - 14, tw + pad*2, 16);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + pad, y - 2);
+}
+
+function drawHandles(x, y, w, h, color) {
+  const hs = 4;
+  ctx.fillStyle = color;
+  [[x,y],[x+w,y],[x,y+h],[x+w,y+h],[x+w/2,y],[x+w/2,y+h],[x,y+h/2],[x+w,y+h/2]].forEach(([hx,hy]) => {
+    ctx.fillRect(hx-hs, hy-hs, hs*2, hs*2);
+  });
+}
+
+function getLabelColor() {
+  const label = document.getElementById('labelSelect').value;
+  return LABEL_COLORS[label] || '#ffd60a';
+}
+
+/* ═══ Canvas Events ═══ */
+canvas.addEventListener('mousedown', e => {
+  if(!imgData) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const s = canvas._scale;
+  const ix = mx / s, iy = my / s; // image coords
+  
+  if(currentTool === 'select') {
+    // Find annotation under cursor
+    selectedIdx = -1;
+    for(let i = annotations.length - 1; i >= 0; i--) {
+      if(hitTest(annotations[i], ix, iy)) { selectedIdx = i; break; }
+    }
+    render();
+    updateList();
+    return;
+  }
+  
+  if(currentTool === 'bbox') {
+    drawing = true;
+    drawStart = { sx: mx, sy: my, ex: mx, ey: my, ix, iy };
+  } else if(currentTool === 'point') {
+    const label = getLabel();
+    pushUndo();
+    annotations.push({ type:'point', label, x:ix, y:iy, id: genId() });
+    selectedIdx = annotations.length - 1;
+    render(); updateList();
+  } else if(currentTool === 'polygon') {
+    // Double-click or right-click to close
+    if(e.detail === 2 && polygonPoints.length >= 3) {
+      const label = getLabel();
+      pushUndo();
+      annotations.push({ type:'polygon', label, points:[...polygonPoints], closed:true, id: genId() });
+      polygonPoints = [];
+      selectedIdx = annotations.length - 1;
+      render(); updateList();
+    } else {
+      polygonPoints.push({ x:ix, y:iy });
+      render();
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const s = canvas._scale || 1;
+  
+  // Crosshairs
+  crossH.style.display = 'block'; crossH.style.top = my + 'px';
+  crossV.style.display = 'block'; crossV.style.left = mx + 'px';
+  coordDisplay.textContent = `${Math.round(mx/s)}, ${Math.round(my/s)}`;
+  
+  if(drawing && currentTool === 'bbox') {
+    drawStart.ex = mx; drawStart.ey = my;
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if(drawing && currentTool === 'bbox' && drawStart) {
+    drawing = false;
+    const s = canvas._scale;
+    let x1 = drawStart.ix, y1 = drawStart.iy;
+    const rect = canvas.getBoundingClientRect();
+    let x2 = (e.clientX - rect.left) / s, y2 = (e.clientY - rect.top) / s;
+    const x = Math.min(x1,x2), y = Math.min(y1,y2);
+    const w = Math.abs(x2-x1), h = Math.abs(y2-y1);
+    if(w > 3 && h > 3) {
+      const label = getLabel();
+      pushUndo();
+      annotations.push({ type:'bbox', label, x, y, w, h, id: genId() });
+      selectedIdx = annotations.length - 1;
+      render(); updateList();
+    }
+    drawStart = null;
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  crossH.style.display = 'none';
+  crossV.style.display = 'none';
+});
+
+// Right-click to close polygon
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if(currentTool === 'polygon' && polygonPoints.length >= 3) {
+    const label = getLabel();
+    pushUndo();
+    annotations.push({ type:'polygon', label, points:[...polygonPoints], closed:true, id: genId() });
+    polygonPoints = [];
+    selectedIdx = annotations.length - 1;
+    render(); updateList();
+  }
+});
+
+/* ═══ Hit Testing ═══ */
+function hitTest(a, x, y) {
+  if(a.type === 'bbox') return x >= a.x && x <= a.x+a.w && y >= a.y && y <= a.y+a.h;
+  if(a.type === 'point') return Math.hypot(x-a.x, y-a.y) < 15;
+  if(a.type === 'polygon' && a.points.length >= 3) {
+    // Ray casting
+    let inside = false;
+    const pts = a.points;
+    for(let i = 0, j = pts.length-1; i < pts.length; j = i++) {
+      if((pts[i].y > y) !== (pts[j].y > y) && x < (pts[j].x-pts[i].x)*(y-pts[i].y)/(pts[j].y-pts[i].y)+pts[i].x)
+        inside = !inside;
+    }
+    return inside;
+  }
+  return false;
+}
+
+/* ═══ Tools ═══ */
+function setTool(tool) {
+  currentTool = tool;
+  if(tool !== 'polygon') polygonPoints = [];
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+  canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+  render();
+}
+
+function getLabel() {
+  const sel = document.getElementById('labelSelect');
+  if(sel.value === 'custom') {
+    const name = prompt('Enter custom label name:');
+    if(name) {
+      LABEL_COLORS[name] = '#ffd60a';
+      return name;
+    }
+    return 'custom';
+  }
+  return sel.value;
+}
+
+function genId() { return 'a' + Math.random().toString(36).slice(2, 8); }
+
+/* ═══ Undo ═══ */
+function pushUndo() { undoStack.push(JSON.parse(JSON.stringify(annotations))); if(undoStack.length > 50) undoStack.shift(); }
+function undoLast() {
+  if(undoStack.length === 0) return;
+  annotations = undoStack.pop();
+  selectedIdx = -1;
+  render(); updateList();
+}
+
+/* ═══ Sidebar List ═══ */
+function updateList() {
+  const list = document.getElementById('annoList');
+  document.getElementById('annoCount').textContent = annotations.length;
+  list.innerHTML = annotations.map((a, i) => {
+    const color = LABEL_COLORS[a.label] || '#ffd60a';
+    let meta = '';
+    if(a.type === 'bbox') meta = `${Math.round(a.w)}×${Math.round(a.h)} at (${Math.round(a.x)},${Math.round(a.y)})`;
+    else if(a.type === 'point') meta = `(${Math.round(a.x)}, ${Math.round(a.y)})`;
+    else if(a.type === 'polygon') meta = `${a.points.length} vertices`;
+    return `<div class="anno-item${i===selectedIdx?' selected':''}" onclick="selectAnno(${i})">
+      <div class="anno-color" style="background:${color}"></div>
+      <div class="anno-info">
+        <div class="anno-label">${a.label.replace('_',' ')} <span style="color:var(--dim);font-weight:400;font-size:.7rem">${a.type}</span></div>
+        <div class="anno-meta">${meta}</div>
+      </div>
+      <div class="anno-actions">
+        <button class="anno-act-btn del" onclick="event.stopPropagation();deleteAnno(${i})" title="Delete">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectAnno(i) { selectedIdx = i; render(); updateList(); }
+function deleteAnno(i) { pushUndo(); annotations.splice(i, 1); if(selectedIdx >= annotations.length) selectedIdx = -1; render(); updateList(); }
+function clearAll() { if(annotations.length && confirm('Clear all annotations?')) { pushUndo(); annotations = []; selectedIdx = -1; render(); updateList(); } }
+
+/* ═══ Video Controls ═══ */
+function togglePlay() {
+  if(video.paused) { video.play(); document.getElementById('playBtn').textContent = '⏸'; }
+  else { video.pause(); document.getElementById('playBtn').textContent = '▶'; captureVideoFrame(); }
+}
+function stepFrame(dir) {
+  video.pause();
+  document.getElementById('playBtn').textContent = '▶';
+  video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + dir/30));
+  setTimeout(() => captureVideoFrame(), 80);
+}
+function seekTo(frac) {
+  video.currentTime = frac * video.duration;
+  if(video.paused) setTimeout(() => captureVideoFrame(), 80);
+}
+function captureFrame() { video.pause(); captureVideoFrame(); }
+function updateTimeDisplay() {
+  const cur = video.currentTime, dur = video.duration || 0;
+  document.getElementById('timeDisplay').textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+  document.getElementById('scrubber').value = dur ? (cur/dur)*1000 : 0;
+}
+function formatTime(s) { const m = Math.floor(s/60); return `${m}:${String(Math.floor(s%60)).padStart(2,'0')}`; }
+video.addEventListener('timeupdate', () => {
+  updateTimeDisplay();
+  if(!video.paused) captureVideoFrame();
+});
+
+/* ═══ Export ═══ */
+function exportCOCO() {
+  const images = [{ id:1, width: imgData?.w||640, height: imgData?.h||480, file_name:'frame.png' }];
+  const categories = [...new Set(annotations.map(a=>a.label))].map((l,i) => ({ id:i+1, name:l, supercategory:'robot' }));
+  const catMap = {}; categories.forEach(c => catMap[c.name] = c.id);
+  
+  const anns = annotations.map((a, i) => {
+    const base = { id:i+1, image_id:1, category_id: catMap[a.label], iscrowd:0 };
+    if(a.type === 'bbox') {
+      base.bbox = [Math.round(a.x), Math.round(a.y), Math.round(a.w), Math.round(a.h)];
+      base.area = Math.round(a.w * a.h);
+      base.segmentation = [];
+    } else if(a.type === 'point') {
+      base.keypoints = [Math.round(a.x), Math.round(a.y), 2];
+      base.num_keypoints = 1;
+      base.bbox = [Math.round(a.x-5), Math.round(a.y-5), 10, 10];
+      base.area = 100;
+    } else if(a.type === 'polygon') {
+      const flat = a.points.flatMap(p => [Math.round(p.x), Math.round(p.y)]);
+      base.segmentation = [flat];
+      const xs = a.points.map(p=>p.x), ys = a.points.map(p=>p.y);
+      const bx = Math.min(...xs), by = Math.min(...ys);
+      base.bbox = [Math.round(bx), Math.round(by), Math.round(Math.max(...xs)-bx), Math.round(Math.max(...ys)-by)];
+      base.area = Math.round(Math.abs(polygonArea(a.points)));
+    }
+    return base;
+  });
+  
+  const coco = { images, annotations: anns, categories };
+  showExport('COCO JSON Export', JSON.stringify(coco, null, 2), 'annotations_coco.json');
+}
+
+function exportSimple() {
+  const data = {
+    frame: { width: imgData?.w||640, height: imgData?.h||480 },
+    annotations: annotations.map(a => {
+      const out = { type: a.type, label: a.label };
+      if(a.type === 'bbox') { out.x = Math.round(a.x); out.y = Math.round(a.y); out.width = Math.round(a.w); out.height = Math.round(a.h); }
+      else if(a.type === 'point') { out.x = Math.round(a.x); out.y = Math.round(a.y); }
+      else if(a.type === 'polygon') { out.points = a.points.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) })); }
+      return out;
+    })
+  };
+  showExport('Simple JSON Export', JSON.stringify(data, null, 2), 'annotations.json');
+}
+
+function polygonArea(pts) {
+  let a = 0;
+  for(let i = 0, j = pts.length-1; i < pts.length; j = i++) {
+    a += pts[j].x * pts[i].y - pts[i].x * pts[j].y;
+  }
+  return a / 2;
+}
+
+function showExport(title, json, filename) {
+  exportData = json; exportFilename = filename;
+  document.getElementById('exportTitle').textContent = title;
+  document.getElementById('exportPre').textContent = json;
+  document.getElementById('exportOverlay').classList.remove('hidden');
+}
+
+function copyExport() {
+  navigator.clipboard.writeText(exportData).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy', 1500);
+  });
+}
+
+function downloadExport() {
+  const blob = new Blob([exportData], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = exportFilename;
+  a.click();
+}
+
+/* ═══ Keyboard Shortcuts ═══ */
+document.addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  
+  if(e.key === 'b' || e.key === 'B') setTool('bbox');
+  else if(e.key === 'p' || e.key === 'P') setTool('point');
+  else if(e.key === 'g' || e.key === 'G') setTool('polygon');
+  else if(e.key === 'v' || e.key === 'V') setTool('select');
+  else if(e.key === 'Delete' || e.key === 'Backspace') {
+    if(selectedIdx >= 0) { deleteAnno(selectedIdx); selectedIdx = -1; }
+  }
+  else if(e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undoLast(); }
+  else if(e.key === 'e' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); exportCOCO(); }
+  else if(e.key === ' ' && isVideo) { e.preventDefault(); togglePlay(); }
+  else if(e.key === ',' && isVideo) stepFrame(-1);
+  else if(e.key === '.' && isVideo) stepFrame(1);
+  else if(e.key === 'Escape') {
+    polygonPoints = [];
+    document.getElementById('exportOverlay').classList.add('hidden');
+    render();
+  }
+});
+
+/* ═══ Window Resize ═══ */
+window.addEventListener('resize', () => { if(imgData) setupCanvas(); });
+</script>
+</body>
+</html>

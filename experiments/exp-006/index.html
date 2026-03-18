@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskRubricGen — Robot Eval Rubric Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #080812;
+      --surf:   #0e0e1c;
+      --surf2:  #141422;
+      --surf3:  #1b1b2e;
+      --border: #1e1e36;
+      --brd2:   #262644;
+      --text:   #e0e0f4;
+      --muted:  #545472;
+      --dim:    #343452;
+      --accent: #818cf8;
+      --acc2:   #6366f1;
+      --green:  #34d399;
+      --amber:  #fbbf24;
+      --red:    #f87171;
+      --cyan:   #22d3ee;
+      --r:      10px;
+    }
+
+    html, body { min-height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    header {
+      background: rgba(8,8,18,0.97);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 28px;
+      display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo-task { color: var(--amber); }
+    .logo-rubric { color: #fff; }
+    .logo-gen { color: var(--accent); }
+    .header-spacer { flex: 1; }
+
+    .main-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 24px;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ── Input panel ── */
+    .panel {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-hdr {
+      padding: 13px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surf2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-hdr h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+    .field-lbl { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+    .field-sub { font-size: 11px; color: var(--muted); margin-bottom: 5px; display: block; }
+
+    input[type=text], textarea, select {
+      width: 100%;
+      background: var(--surf2);
+      border: 1px solid var(--brd2);
+      border-radius: 7px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+    input[type=text]::placeholder { color: var(--muted); }
+    textarea { resize: vertical; }
+
+    /* Task type chips */
+    .chip-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+    .task-chip {
+      padding: 5px 11px; border-radius: 20px;
+      border: 1px solid var(--brd2);
+      background: var(--surf2);
+      color: var(--muted); font-size: 12px;
+      cursor: pointer; transition: all 0.14s;
+      user-select: none;
+    }
+    .task-chip:hover { color: var(--text); border-color: var(--dim); }
+    .task-chip.selected { background: rgba(129,140,248,0.15); border-color: var(--accent); color: #c7d2fe; }
+
+    /* Difficulty / precision range */
+    .range-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+    .range-val { font-size: 13px; font-weight: 700; color: var(--accent); min-width: 24px; text-align: right; }
+    input[type=range].gen-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 2px;
+      background: var(--brd2); outline: none; cursor: pointer;
+    }
+    input[type=range].gen-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+
+    /* Weight sliders for dimensions */
+    .weight-row {
+      display: grid; grid-template-columns: 130px 1fr 36px 30px;
+      align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+    .weight-row:last-child { margin-bottom: 0; }
+    .weight-dim-name { font-size: 12px; color: var(--text); }
+    input[type=range].weight-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 2px;
+      background: var(--brd2); outline: none; cursor: pointer;
+    }
+    input[type=range].weight-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 12px; height: 12px;
+      border-radius: 50%; background: var(--amber); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .weight-val { font-size: 12px; font-weight: 700; color: var(--amber); text-align: right; font-variant-numeric: tabular-nums; }
+    .weight-pct { font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+    .btn-generate {
+      width: 100%; padding: 12px;
+      background: var(--accent); border: none;
+      color: #fff; font-size: 14px; font-weight: 700;
+      border-radius: 9px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-generate:hover { background: var(--acc2); transform: translateY(-1px); }
+    .btn-generate:active { transform: none; }
+
+    /* ── Rubric output ── */
+    .output-panel {
+      position: sticky; top: 80px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    /* Rubric preview card */
+    .rubric-preview {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .rubric-preview-hdr {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surf2);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .rubric-preview-hdr h2 { font-size: 16px; font-weight: 700; color: #fff; }
+    .rubric-preview-hdr .meta { font-size: 12px; color: var(--muted); }
+
+    .rubric-body { padding: 20px; }
+
+    /* Dimension sections */
+    .rubric-dim {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .rubric-dim:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+    .rubric-dim-header {
+      display: flex; align-items: baseline; gap: 10px;
+      margin-bottom: 8px;
+    }
+    .rubric-dim-name { font-size: 14px; font-weight: 700; color: #fff; }
+    .rubric-dim-weight {
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px;
+      background: rgba(251,191,36,0.12);
+      color: var(--amber); border: 1px solid rgba(251,191,36,0.2);
+    }
+    .rubric-dim-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+    /* Score levels table */
+    .score-table { width: 100%; border-collapse: collapse; }
+    .score-table th {
+      text-align: left; padding: 6px 10px;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .score-table td {
+      padding: 8px 10px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .score-table tr:last-child td { border-bottom: none; }
+    .score-pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 20px;
+      border-radius: 4px; font-size: 11px; font-weight: 800;
+    }
+
+    /* Scoring guide callout */
+    .scoring-guide {
+      background: var(--surf2);
+      border: 1px solid var(--brd2);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.6;
+      margin-top: 16px;
+    }
+    .scoring-guide strong { color: var(--accent); }
+
+    /* Action buttons */
+    .output-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .out-btn {
+      padding: 8px 18px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; transition: all 0.15s;
+    }
+    .out-btn-primary { background: var(--accent); color: #fff; }
+    .out-btn-primary:hover { background: var(--acc2); }
+    .out-btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .out-btn-ghost:hover { border-color: var(--dim); }
+
+    /* Print styles */
+    @media print {
+      header, .main-grid > *:first-child, .output-actions { display: none !important; }
+      .output-panel { position: static; }
+      .rubric-preview { border: none; }
+      body { background: #fff; color: #000; }
+      .rubric-dim-name { color: #000; }
+      .rubric-preview-hdr { background: #f8f8f8; }
+      .score-table th, .score-table td { border-color: #ddd; }
+      .score-pill { border: 1px solid #ccc; }
+      .rubric-dim-weight { background: #fff8e0; color: #8b6000; border: 1px solid #e0c060; }
+      .scoring-guide { background: #f0f4ff; border-left: 3px solid #5555cc; }
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surf2); border: 1px solid rgba(129,140,248,0.4);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      z-index: 300; opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .output-panel { position: static; }
+    }
+    @media (max-width: 600px) {
+      header { padding: 10px 16px; }
+      .main-grid { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-task">Task</span><span class="logo-rubric">Rubric</span><span class="logo-gen">Gen</span>
+  </div>
+  <span style="font-size:12px;color:var(--muted)">Robot Evaluation Rubric Builder</span>
+  <div class="header-spacer"></div>
+  <button class="out-btn out-btn-ghost" onclick="window.print()" style="font-size:12px;padding:5px 14px">🖨 Print</button>
+  <button class="out-btn out-btn-ghost" onclick="downloadHTML()" style="font-size:12px;padding:5px 14px">⬇ Download</button>
+</header>
+
+<div class="main-grid">
+
+  <!-- Left: input form -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Task info -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>📋 Task Information</h2></div>
+      <div class="panel-body">
+        <div>
+          <label class="field-lbl">Task Name</label>
+          <input type="text" id="task-name" placeholder="e.g. Pick and place folded sweater" oninput="liveGenerate()">
+        </div>
+        <div>
+          <label class="field-lbl">Task Description</label>
+          <textarea id="task-desc" placeholder="Describe what the robot should do, starting conditions, success definition…" rows="3" oninput="liveGenerate()"></textarea>
+        </div>
+        <div>
+          <label class="field-lbl">Task Type</label>
+          <div class="chip-grid" id="task-type-chips"></div>
+        </div>
+        <div>
+          <label class="field-lbl">Robot / Platform</label>
+          <input type="text" id="robot-platform" placeholder="e.g. UMI gripper on UR5, 6-DOF arm, mobile manipulator" oninput="liveGenerate()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Complexity settings -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>⚙️ Rubric Settings</h2></div>
+      <div class="panel-body">
+        <div>
+          <label class="field-lbl">Task Difficulty</label>
+          <span class="field-sub">Affects scoring thresholds and descriptor language</span>
+          <div class="range-row">
+            <input type="range" class="gen-slider" id="difficulty" min="1" max="5" step="1" value="3" oninput="updateSliderVal('difficulty',this.value,'difficulty-val');liveGenerate()">
+            <span class="range-val" id="difficulty-val">3</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px">
+            <span>Trivial</span><span>Simple</span><span>Moderate</span><span>Hard</span><span>Expert</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-lbl">Precision Requirements</label>
+          <span class="field-sub">How exact does placement/motion need to be?</span>
+          <div class="range-row">
+            <input type="range" class="gen-slider" id="precision" min="1" max="5" step="1" value="3" oninput="updateSliderVal('precision',this.value,'precision-val');liveGenerate()">
+            <span class="range-val" id="precision-val">3</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-lbl">Number of Score Levels</label>
+          <select id="score-levels" onchange="liveGenerate()">
+            <option value="3">3 levels (Fail / Pass / Excellent)</option>
+            <option value="4">4 levels</option>
+            <option value="5" selected>5 levels (1–5 scale)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dimension weights -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <h2>⚖️ Dimension Weights</h2>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto" id="weights-total">Total: 100%</span>
+      </div>
+      <div class="panel-body">
+        <div id="weights-container"></div>
+        <button class="out-btn out-btn-ghost" onclick="equalizeWeights()" style="font-size:12px;padding:5px 14px;width:100%">⚖ Equalize Weights</button>
+      </div>
+    </div>
+
+    <button class="btn-generate" onclick="generateRubric()">✨ Generate Rubric</button>
+
+  </div>
+
+  <!-- Right: output -->
+  <div class="output-panel" id="output-panel">
+    <div style="color:var(--muted);font-size:13px;text-align:center;padding:60px 20px;background:var(--surf);border:1px solid var(--border);border-radius:12px">
+      Fill in the task details and click Generate Rubric.<br>
+      <span style="font-size:11px">The output is print-ready and downloadable as HTML.</span>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Task type chips ──
+const TASK_TYPES = [
+  { id: 'grasping',     label: '🤏 Grasping' },
+  { id: 'pick-place',   label: '📦 Pick & Place' },
+  { id: 'assembly',     label: '🔩 Assembly' },
+  { id: 'sorting',      label: '🗂 Sorting' },
+  { id: 'folding',      label: '👕 Cloth Folding' },
+  { id: 'pouring',      label: '🥛 Pouring' },
+  { id: 'navigation',   label: '🗺 Navigation' },
+  { id: 'manipulation', label: '🦾 Manipulation' },
+  { id: 'inspection',   label: '🔍 Inspection' },
+  { id: 'door-opening', label: '🚪 Door/Drawer' },
+];
+
+const TASK_TYPES_EL = document.getElementById('task-type-chips');
+TASK_TYPES.forEach(t => {
+  const c = document.createElement('span');
+  c.className = 'task-chip'; c.dataset.id = t.id;
+  c.textContent = t.label;
+  c.onclick = () => { c.classList.toggle('selected'); liveGenerate(); };
+  TASK_TYPES_EL.appendChild(c);
+});
+
+// ── Evaluation dimensions ──
+const EVAL_DIMS = [
+  { id: 'task_success',  name: 'Task Success',       defaultWeight: 30 },
+  { id: 'grasp_quality', name: 'Grasp Quality',      defaultWeight: 20 },
+  { id: 'motion_smooth', name: 'Motion Smoothness',  defaultWeight: 15 },
+  { id: 'safety',        name: 'Safety',             defaultWeight: 15 },
+  { id: 'efficiency',    name: 'Efficiency / Speed', defaultWeight: 10 },
+  { id: 'recovery',      name: 'Recovery / Error',   defaultWeight: 10 },
+];
+
+// Build weight sliders
+const weightsContainer = document.getElementById('weights-container');
+EVAL_DIMS.forEach(dim => {
+  const row = document.createElement('div');
+  row.className = 'weight-row';
+  row.innerHTML = `
+    <span class="weight-dim-name">${dim.name}</span>
+    <input type="range" class="weight-slider" id="w-${dim.id}"
+      min="0" max="50" step="5" value="${dim.defaultWeight}"
+      oninput="updateWeightDisplay('${dim.id}');liveGenerate()">
+    <span class="weight-val" id="wv-${dim.id}">${dim.defaultWeight}</span>
+    <span class="weight-pct" id="wp-${dim.id}">${dim.defaultWeight}%</span>
+  `;
+  weightsContainer.appendChild(row);
+});
+
+function updateWeightDisplay(id) {
+  const val = parseInt(document.getElementById(`w-${id}`).value);
+  document.getElementById(`wv-${id}`).textContent = val;
+  document.getElementById(`wp-${id}`).textContent = val + '%';
+  updateWeightsTotal();
+}
+
+function updateWeightsTotal() {
+  const total = EVAL_DIMS.reduce((a,d) => a + parseInt(document.getElementById(`w-${d.id}`).value), 0);
+  const el = document.getElementById('weights-total');
+  el.textContent = `Total: ${total}%`;
+  el.style.color = total === 100 ? 'var(--green)' : total > 100 ? 'var(--red)' : 'var(--amber)';
+}
+updateWeightsTotal();
+
+function equalizeWeights() {
+  const equal = Math.round(100 / EVAL_DIMS.length / 5) * 5;
+  EVAL_DIMS.forEach(d => {
+    const el = document.getElementById(`w-${d.id}`);
+    el.value = equal;
+    updateWeightDisplay(d.id);
+  });
+  liveGenerate();
+}
+
+function updateSliderVal(id, val, displayId) {
+  document.getElementById(displayId).textContent = val;
+}
+
+function getSelectedTypes() {
+  return [...document.querySelectorAll('.task-chip.selected')].map(c => c.dataset.id);
+}
+
+// ── Descriptor libraries ──
+const DESCRIPTORS = {
+  task_success: {
+    desc: 'Whether the robot successfully completed the primary task objective.',
+    levels: {
+      1: 'Complete failure — task not attempted or immediately abandoned',
+      2: 'Significant failure — partial attempt with major errors',
+      3: 'Partial success — completes some steps but fails at key moments',
+      4: 'Near success — completes task with minor errors or suboptimal execution',
+      5: 'Full success — task completed correctly and completely',
+    },
+  },
+  grasp_quality: {
+    desc: 'Stability, precision, and appropriateness of object grasps during the task.',
+    levels: {
+      1: 'No grasp achieved, or grasp causes object damage/drop immediately',
+      2: 'Unstable grasp — object slips, wobbles, or is misaligned throughout',
+      3: 'Functional grasp but poor positioning or excessive force',
+      4: 'Good grasp — stable and appropriately positioned with minor issues',
+      5: 'Excellent grasp — stable, well-centered, appropriate force',
+    },
+  },
+  motion_smooth: {
+    desc: 'Continuity and fluidity of robot motion throughout the task execution.',
+    levels: {
+      1: 'Erratic or jerky motion throughout, multiple abrupt stops',
+      2: 'Frequent jitter or speed inconsistencies',
+      3: 'Generally smooth with some visible hesitations or speed changes',
+      4: 'Mostly smooth with minor imperfections',
+      5: 'Perfectly fluid, continuous motion throughout',
+    },
+  },
+  safety: {
+    desc: 'Avoidance of collisions, excessive forces, and hazardous behaviors.',
+    levels: {
+      1: 'Dangerous behavior — collision, excessive force, potential damage',
+      2: 'Several safety concerns — near misses or unexpected contact',
+      3: 'Generally safe with some unnecessary contact or close calls',
+      4: 'Safe execution with minor concerns',
+      5: 'Completely safe — no unintended contacts or hazardous actions',
+    },
+  },
+  efficiency: {
+    desc: 'Time and motion economy — avoiding unnecessary steps or movements.',
+    levels: {
+      1: 'Extremely inefficient — excessive unnecessary motion or very slow',
+      2: 'Significantly inefficient — many redundant moves',
+      3: 'Adequate efficiency with room for improvement',
+      4: 'Good efficiency — mostly direct paths and appropriate speed',
+      5: 'Highly efficient — optimal motion paths and timing',
+    },
+  },
+  recovery: {
+    desc: 'Ability to detect and recover from errors, slips, or unexpected states.',
+    levels: {
+      1: 'No recovery attempt — fails immediately on error',
+      2: 'Poor recovery — attempts but fails or makes situation worse',
+      3: 'Partial recovery — recovers from some errors but not all',
+      4: 'Good recovery — successfully handles most error conditions',
+      5: 'Excellent recovery — robustly handles all errors encountered',
+    },
+  },
+};
+
+// Task-type-specific overrides
+const TASK_TYPE_MODIFIERS = {
+  'pick-place': {
+    task_success: { desc: 'Whether the object is successfully grasped and placed at the target location.' },
+    grasp_quality: { desc: 'Quality of initial grasp before transport phase.' },
+  },
+  'folding': {
+    task_success: { desc: 'Whether the cloth item is correctly folded to the target configuration.' },
+    motion_smooth: { desc: 'Smoothness of cloth manipulation motions — avoids tearing or tangling.' },
+    grasp_quality: { desc: 'Appropriateness of cloth grasping strategy (pinch, fold, spread).' },
+  },
+  'assembly': {
+    task_success: { desc: 'Whether all components are correctly assembled in the required configuration.' },
+    grasp_quality: { desc: 'Precision of part grasps required for accurate insertion/mating.' },
+  },
+  'navigation': {
+    motion_smooth: { desc: 'Path smoothness and obstacle avoidance quality.' },
+    safety: { desc: 'Avoidance of pedestrians, obstacles, and restricted zones.' },
+  },
+};
+
+// Difficulty-based threshold adjustments
+const DIFFICULTY_LABELS = ['', 'Trivial', 'Simple', 'Moderate', 'Hard', 'Expert'];
+const PRECISION_LABELS  = ['', 'Coarse', 'Low', 'Medium', 'High', 'Surgical'];
+
+// ── Generator ──
+function generateRubric() {
+  const taskName   = document.getElementById('task-name').value.trim() || 'Unnamed Task';
+  const taskDesc   = document.getElementById('task-desc').value.trim();
+  const robotPlatform = document.getElementById('robot-platform').value.trim();
+  const difficulty = parseInt(document.getElementById('difficulty').value);
+  const precision  = parseInt(document.getElementById('precision').value);
+  const numLevels  = parseInt(document.getElementById('score-levels').value);
+  const taskTypes  = getSelectedTypes();
+
+  const weights = {};
+  EVAL_DIMS.forEach(d => { weights[d.id] = parseInt(document.getElementById(`w-${d.id}`).value); });
+  const totalWeight = Object.values(weights).reduce((a,b)=>a+b,0);
+
+  // Score level labels
+  const levelLabels = {
+    3: ['Fail', 'Pass', 'Excellent'],
+    4: ['Fail', 'Poor', 'Good', 'Excellent'],
+    5: ['1 — Fail', '2 — Poor', '3 — OK', '4 — Good', '5 — Excellent'],
+  };
+  const levels = levelLabels[numLevels] || levelLabels[5];
+
+  // Generate per-dimension rubric
+  const dimSections = EVAL_DIMS.map(dim => {
+    const w = weights[dim.id];
+    if (w === 0) return '';
+    const pct = totalWeight > 0 ? Math.round(w/totalWeight*100) : 0;
+
+    const base = DESCRIPTORS[dim.id];
+    // Apply task-type modifiers
+    let dimDesc = base.desc;
+    let dimLevels = { ...base.levels };
+    taskTypes.forEach(tt => {
+      const mod = TASK_TYPE_MODIFIERS[tt]?.[dim.id];
+      if (mod?.desc) dimDesc = mod.desc;
+    });
+
+    // Subsample levels to requested count
+    const allLevelKeys = [1,2,3,4,5];
+    let usedKeys;
+    if (numLevels === 3) usedKeys = [1, 3, 5];
+    else if (numLevels === 4) usedKeys = [1, 2, 4, 5];
+    else usedKeys = [1, 2, 3, 4, 5];
+
+    const scoreRows = usedKeys.map((key, li) => {
+      const scoreVal = key;
+      const color = scoreColor(scoreVal/5);
+      return `<tr>
+        <td><span class="score-pill" style="background:${color}22;color:${color}">${levels[li].split(' — ')[0]}</span></td>
+        <td style="font-weight:600;color:${color}">${scoreVal}/5</td>
+        <td>${dimLevels[key]}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="rubric-dim">
+        <div class="rubric-dim-header">
+          <span class="rubric-dim-name">${dim.name}</span>
+          <span class="rubric-dim-weight">${w} pts (${pct}%)</span>
+        </div>
+        <div class="rubric-dim-desc">${dimDesc}</div>
+        <table class="score-table">
+          <thead><tr><th>Level</th><th>Score</th><th>Description</th></tr></thead>
+          <tbody>${scoreRows}</tbody>
+        </table>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // Scoring guide callout
+  const scoreGuide = `
+    <div class="scoring-guide">
+      <strong>Scoring Formula:</strong> Aggregate = Σ(dimension_score × weight) / total_weight<br>
+      <strong>Difficulty:</strong> ${DIFFICULTY_LABELS[difficulty]} · 
+      <strong>Precision:</strong> ${PRECISION_LABELS[precision]}<br>
+      ${robotPlatform ? `<strong>Platform:</strong> ${robotPlatform}<br>` : ''}
+      ${taskTypes.length > 0 ? `<strong>Task Types:</strong> ${taskTypes.join(', ')}<br>` : ''}
+      <strong>Total Weight:</strong> ${totalWeight} pts
+    </div>`;
+
+  const timestamp = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  const rubricHTML = `
+    <div class="rubric-preview-hdr">
+      <div>
+        <h2>${taskName}</h2>
+        <div class="meta">${taskDesc || 'Evaluation Rubric'} · Generated ${timestamp}</div>
+      </div>
+    </div>
+    <div class="rubric-body">
+      ${dimSections}
+      ${scoreGuide}
+    </div>
+  `;
+
+  // Store for download
+  window._lastRubricHTML = rubricHTML;
+  window._lastTaskName   = taskName;
+
+  const outputPanel = document.getElementById('output-panel');
+  outputPanel.innerHTML = `
+    <div class="rubric-preview" id="rubric-preview-el">${rubricHTML}</div>
+    <div class="output-actions">
+      <button class="out-btn out-btn-primary" onclick="window.print()">🖨 Print</button>
+      <button class="out-btn out-btn-ghost" onclick="downloadHTML()">⬇ Download HTML</button>
+      <button class="out-btn out-btn-ghost" onclick="copyRubricText()">📋 Copy Text</button>
+    </div>
+  `;
+  showToast('✓ Rubric generated!');
+}
+
+function scoreColor(pct) {
+  if (pct < 0.5) return `rgb(240,${Math.round(pct*2*155+52)},52)`;
+  return `rgb(${Math.round((1-(pct-0.5)*2)*240)},207,52)`;
+}
+
+// Live preview on input
+let liveTimer;
+function liveGenerate() {
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => {
+    const taskName = document.getElementById('task-name').value.trim();
+    if (taskName) generateRubric();
+  }, 400);
+}
+
+// ── Download HTML ──
+function downloadHTML() {
+  if (!window._lastRubricHTML) { showToast('Generate a rubric first!'); return; }
+  const fullHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${window._lastTaskName || 'Rubric'} — Evaluation Rubric</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 40px 24px; background: #fff; color: #111; }
+    .rubric-preview-hdr { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #eee; }
+    h2 { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+    .meta { font-size: 13px; color: #888; }
+    .rubric-dim { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #eee; }
+    .rubric-dim-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+    .rubric-dim-name { font-size: 16px; font-weight: 700; }
+    .rubric-dim-weight { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #fffae0; color: #8b6000; }
+    .rubric-dim-desc { font-size: 13px; color: #555; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 7px 10px; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+    .score-pill { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 20px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #f0f0f0; }
+    .scoring-guide { background: #f0f4ff; border-left: 3px solid #5555cc; border-radius: 6px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="rubric-preview">
+    ${window._lastRubricHTML}
+  </div>
+</body>
+</html>`;
+  const blob = new Blob([fullHTML], {type:'text/html'});
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `${(window._lastTaskName||'rubric').replace(/[^a-z0-9]/gi,'-').toLowerCase()}-rubric.html`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast('Downloaded rubric HTML!');
+}
+
+function copyRubricText() {
+  const el = document.getElementById('rubric-preview-el');
+  if (!el) { showToast('Generate first!'); return; }
+  const text = el.innerText;
+  navigator.clipboard.writeText(text).then(() => showToast('Rubric text copied!')).catch(()=>{});
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ── Init ──
+// Trigger with default values
+setTimeout(liveGenerate, 100);
+</script>
+</body>
+</html>

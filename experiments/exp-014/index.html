@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmos Config Builder — Transfer 2.5 Inference Config</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #07070e;
+      --surf:   #0d0d1a;
+      --surf2:  #131320;
+      --surf3:  #181828;
+      --border: #1c1c30;
+      --brd2:   #232338;
+      --text:   #e0e0f4;
+      --muted:  #545472;
+      --dim:    #343452;
+      --accent: #818cf8;
+      --acc2:   #6366f1;
+      --green:  #34d399;
+      --amber:  #fbbf24;
+      --cyan:   #22d3ee;
+      --pink:   #f472b6;
+      --r:      10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: rgba(7,7,14,0.97); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo-c { background: linear-gradient(135deg, var(--accent), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .header-spacer { flex: 1; }
+    .header-badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: rgba(129,140,248,0.12); border: 1px solid rgba(129,140,248,0.25); color: #c7d2fe; }
+
+    .app-layout {
+      display: grid; grid-template-columns: 440px 1fr;
+      max-width: 1300px; margin: 0 auto; padding: 24px; gap: 20px;
+    }
+
+    /* ── Panels ── */
+    .panel { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 14px; overflow: hidden; }
+    .panel-hdr {
+      padding: 11px 16px; border-bottom: 1px solid var(--border); background: var(--surf2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-hdr h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .panel-hdr-right { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .panel-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* ── Fields ── */
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--text); }
+    .field .hint  { font-size: 11px; color: var(--muted); }
+    .field .range-val { font-size: 13px; font-weight: 700; color: var(--accent); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    input[type=text], input[type=number], select, textarea {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      border-radius: 7px; color: var(--text);
+      font-family: inherit; font-size: 13px;
+      padding: 8px 12px; outline: none; transition: border-color 0.15s; width: 100%;
+    }
+    input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--muted); }
+    select option { background: #1a1a28; }
+
+    .slider-row { display: flex; align-items: center; gap: 8px; }
+    input[type=range].cfg-slider {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; background: var(--brd2); outline: none; cursor: pointer;
+    }
+    input[type=range].cfg-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
+    .toggle-label { font-size: 12px; font-weight: 600; }
+    input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+
+    /* Chip selector */
+    .chip-row { display: flex; gap: 5px; flex-wrap: wrap; }
+    .cfg-chip {
+      padding: 4px 11px; border-radius: 20px; border: 1px solid var(--brd2);
+      background: var(--surf2); color: var(--muted); font-size: 12px;
+      cursor: pointer; transition: all 0.12s; user-select: none;
+    }
+    .cfg-chip:hover { color: var(--text); border-color: var(--dim); }
+    .cfg-chip.active { background: rgba(129,140,248,0.15); border-color: var(--accent); color: #c7d2fe; }
+
+    /* ── Output panel ── */
+    .output-panel { position: sticky; top: 80px; }
+    .output-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--surf2); }
+    .output-tab {
+      padding: 9px 16px; font-size: 12px; font-weight: 500; color: var(--muted);
+      cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.12s;
+    }
+    .output-tab:hover { color: var(--text); }
+    .output-tab.active { color: #fff; border-bottom-color: var(--accent); }
+
+    .output-view { display: none; }
+    .output-view.active { display: block; }
+
+    pre.code-output {
+      background: var(--surf2); padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+      line-height: 1.7; color: #a5b4fc;
+      overflow-x: auto; white-space: pre;
+      max-height: 60vh; overflow-y: auto;
+    }
+
+    /* CLI output */
+    pre.cli-output {
+      background: #000; padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+      line-height: 1.7; color: #86efac;
+      overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+    }
+    pre.cli-output .cli-cmd  { color: #38bdf8; }
+    pre.cli-output .cli-arg  { color: #fbbf24; }
+    pre.cli-output .cli-val  { color: #86efac; }
+    pre.cli-output .cli-comm { color: #555; }
+
+    .output-footer {
+      padding: 10px 16px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .out-btn {
+      padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600;
+      cursor: pointer; border: none; transition: all 0.14s;
+    }
+    .out-btn-primary { background: var(--accent); color: #fff; }
+    .out-btn-primary:hover { background: var(--acc2); }
+    .out-btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .out-btn-ghost:hover { background: var(--surf3); }
+
+    /* Param badges */
+    .param-badge {
+      font-size: 10px; padding: 2px 7px; border-radius: 4px;
+      font-weight: 700; margin-left: 6px;
+    }
+    .param-badge.recommended { background: rgba(52,211,153,0.12); color: var(--green); border: 1px solid rgba(52,211,153,0.2); }
+    .param-badge.experimental { background: rgba(251,191,36,0.1); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+
+    /* Preset buttons */
+    .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .preset-btn {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); padding: 8px 12px;
+      border-radius: 8px; font-size: 12px; cursor: pointer;
+      transition: all 0.14s; text-align: left;
+    }
+    .preset-btn:hover { border-color: var(--accent); background: rgba(129,140,248,0.08); }
+    .preset-btn strong { display: block; font-size: 12px; font-weight: 700; color: #fff; }
+    .preset-btn span { font-size: 10px; color: var(--muted); }
+
+    @media (max-width: 960px) {
+      .app-layout { grid-template-columns: 1fr; }
+      .output-panel { position: static; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo"><span class="logo-c">Cosmos</span> Config Builder</div>
+  </div>
+  <span class="header-badge">Transfer 2.5</span>
+  <span class="header-badge" style="background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.25);color:#6ee7b7">No API Key</span>
+  <div class="header-spacer"></div>
+</header>
+
+<div class="app-layout">
+
+  <!-- Left: form -->
+  <div>
+
+    <!-- Presets -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>⚡ Quick Presets</h2></div>
+      <div class="panel-body">
+        <div class="preset-grid" id="preset-grid"></div>
+      </div>
+    </div>
+
+    <!-- Model -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>🤖 Model</h2></div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Model Size</label>
+          <select id="model-size" onchange="generate()">
+            <option value="7B">Cosmos-Transfer2.5-7B — Fast inference, good quality</option>
+            <option value="14B" selected>Cosmos-Transfer2.5-14B — Recommended ✓</option>
+            <option value="34B">Cosmos-Transfer2.5-34B — Best quality, slow</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Control Variant</label>
+          <select id="control-variant" onchange="generate()">
+            <option value="Video2World">Video2World — Standard video-conditioned</option>
+            <option value="Img2World">Img2World — Image + text conditioned</option>
+            <option value="SVD">SVD (Stable Video Diffusion) variant</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input/Output -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>📁 Input / Output</h2></div>
+      <div class="panel-body">
+        <div class="field-row">
+          <div class="field">
+            <label>Source Video</label>
+            <input type="text" id="input-video" placeholder="input.mp4" oninput="generate()" value="input.mp4">
+          </div>
+          <div class="field">
+            <label>Output Path</label>
+            <input type="text" id="output-video" placeholder="output.mp4" oninput="generate()" value="output_cosmos.mp4">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Output Width (px)</label>
+            <select id="output-width" onchange="generate()">
+              <option value="640">640</option>
+              <option value="960">960</option>
+              <option value="1280" selected>1280</option>
+              <option value="1920">1920</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Output Height (px)</label>
+            <select id="output-height" onchange="generate()">
+              <option value="360">360</option>
+              <option value="540">540</option>
+              <option value="720" selected>720</option>
+              <option value="1080">1080</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generation params -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <h2>⚙️ Generation Params</h2>
+        <span class="panel-hdr-right" id="param-summary"></span>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Guidance Scale <span class="param-badge recommended">rec: 7.0</span></label>
+          <div class="slider-row">
+            <input type="range" class="cfg-slider" id="guidance-scale" min="1" max="20" step="0.5" value="7" oninput="updateVal('guidance-scale');generate()">
+            <span class="range-val" id="guidance-scale-v">7.0</span>
+          </div>
+          <div class="hint">Higher = more prompt adherence, less variation</div>
+        </div>
+        <div class="field">
+          <label>Temporal Consistency <span class="param-badge recommended">rec: 0.8</span></label>
+          <div class="slider-row">
+            <input type="range" class="cfg-slider" id="temp-consistency" min="0" max="1" step="0.05" value="0.8" oninput="updateVal('temp-consistency');generate()">
+            <span class="range-val" id="temp-consistency-v">0.80</span>
+          </div>
+          <div class="hint">0 = free generation, 1 = max temporal coherence</div>
+        </div>
+        <div class="field">
+          <label>Source Video Weight <span class="param-badge recommended">rec: 0.6</span></label>
+          <div class="slider-row">
+            <input type="range" class="cfg-slider" id="source-weight" min="0" max="1" step="0.05" value="0.6" oninput="updateVal('source-weight');generate()">
+            <span class="range-val" id="source-weight-v">0.60</span>
+          </div>
+          <div class="hint">How strongly to preserve original motion structure</div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Num Inference Steps</label>
+            <div class="slider-row">
+              <input type="range" class="cfg-slider" id="num-steps" min="10" max="100" step="5" value="25" oninput="updateVal('num-steps');generate()">
+              <span class="range-val" id="num-steps-v">25</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Random Seed</label>
+            <input type="number" id="seed" value="42" min="0" oninput="generate()">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Batch Size</label>
+            <select id="batch-size" onchange="generate()">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Num Frames</label>
+            <select id="num-frames" onchange="generate()">
+              <option value="16">16</option>
+              <option value="25">25</option>
+              <option value="49" selected>49 (rec)</option>
+              <option value="97">97</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompts -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>📝 Prompts</h2></div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Positive Prompt</label>
+          <textarea id="pos-prompt" rows="3" placeholder="A robotic arm performing pick and place, bright daylight, clean lab environment, photorealistic…" oninput="generate()"></textarea>
+        </div>
+        <div class="field">
+          <label>Negative Prompt</label>
+          <textarea id="neg-prompt" rows="2" placeholder="blurry, low quality, artifacts, distortion…" oninput="generate()"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hardware -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>🖥 Hardware & Precision</h2></div>
+      <div class="panel-body">
+        <div class="field-row">
+          <div class="field">
+            <label>Device</label>
+            <select id="device" onchange="generate()">
+              <option value="cuda">CUDA (GPU)</option>
+              <option value="cuda:0">cuda:0</option>
+              <option value="cuda:1">cuda:1</option>
+              <option value="cpu">CPU (slow)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Dtype</label>
+            <select id="dtype" onchange="generate()">
+              <option value="bfloat16" selected>bfloat16 (recommended)</option>
+              <option value="float16">float16</option>
+              <option value="float32">float32</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Offload Strategy</label>
+          <div class="chip-row" id="offload-chips">
+            <span class="cfg-chip" data-val="none">None</span>
+            <span class="cfg-chip active" data-val="model">Model Offload</span>
+            <span class="cfg-chip" data-val="sequential">Sequential</span>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="enable-xformers" checked onchange="generate()">
+          <span class="toggle-label">Enable xFormers / Flash Attention</span>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="enable-tiling" onchange="generate()">
+          <span class="toggle-label">Enable VAE Tiling (for large outputs)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: output -->
+  <div class="output-panel">
+    <div class="panel" style="margin-bottom:0">
+      <div class="output-tabs">
+        <div class="output-tab active" data-out="yaml" onclick="showOutput('yaml',this)">YAML</div>
+        <div class="output-tab" data-out="json" onclick="showOutput('json',this)">JSON</div>
+        <div class="output-tab" data-out="python" onclick="showOutput('python',this)">Python</div>
+        <div class="output-tab" data-out="cli" onclick="showOutput('cli',this)">CLI</div>
+        <div class="output-tab" data-out="bash" onclick="showOutput('bash',this)">Bash Script</div>
+      </div>
+      <div class="output-view active" id="out-yaml"><pre class="code-output" id="yaml-output"></pre></div>
+      <div class="output-view" id="out-json"><pre class="code-output" id="json-output"></pre></div>
+      <div class="output-view" id="out-python"><pre class="code-output" id="python-output" style="color:#c084fc"></pre></div>
+      <div class="output-view" id="out-cli"><pre class="cli-output" id="cli-output"></pre></div>
+      <div class="output-view" id="out-bash"><pre class="code-output" id="bash-output" style="color:#86efac"></pre></div>
+      <div class="output-footer">
+        <button class="out-btn out-btn-primary" onclick="copyCurrentOutput()">📋 Copy</button>
+        <button class="out-btn out-btn-ghost" onclick="downloadCurrentOutput()">⬇ Download</button>
+        <button class="out-btn out-btn-ghost" onclick="savePreset()">💾 Save Preset</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// Presets
+// ─────────────────────────────────────────
+const PRESETS = [
+  {
+    name: 'Fast Draft',
+    sub: '7B · 15 steps · quick preview',
+    cfg: { 'model-size': '7B', 'guidance-scale': 5, 'temp-consistency': 0.7, 'source-weight': 0.6, 'num-steps': 15, 'num-frames': 25, 'batch-size': 1, 'dtype': 'float16' },
+  },
+  {
+    name: 'Recommended',
+    sub: '14B · 25 steps · balanced',
+    cfg: { 'model-size': '14B', 'guidance-scale': 7, 'temp-consistency': 0.8, 'source-weight': 0.6, 'num-steps': 25, 'num-frames': 49, 'batch-size': 1, 'dtype': 'bfloat16' },
+  },
+  {
+    name: 'High Quality',
+    sub: '34B · 50 steps · best output',
+    cfg: { 'model-size': '34B', 'guidance-scale': 9, 'temp-consistency': 0.85, 'source-weight': 0.55, 'num-steps': 50, 'num-frames': 49, 'batch-size': 1, 'dtype': 'bfloat16' },
+  },
+  {
+    name: 'Strong Augment',
+    sub: '14B · low source weight',
+    cfg: { 'model-size': '14B', 'guidance-scale': 12, 'temp-consistency': 0.6, 'source-weight': 0.3, 'num-steps': 30, 'num-frames': 49, 'batch-size': 1 },
+  },
+  {
+    name: 'Preserve Motion',
+    sub: 'High source weight',
+    cfg: { 'model-size': '14B', 'guidance-scale': 6, 'temp-consistency': 0.95, 'source-weight': 0.85, 'num-steps': 25, 'num-frames': 49 },
+  },
+  {
+    name: 'Batch × 4',
+    sub: '4 samples per run',
+    cfg: { 'model-size': '14B', 'guidance-scale': 7.5, 'temp-consistency': 0.8, 'source-weight': 0.6, 'num-steps': 25, 'batch-size': 4 },
+  },
+];
+
+function buildPresets() {
+  const grid = document.getElementById('preset-grid');
+  PRESETS.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.innerHTML = `<strong>${p.name}</strong><span>${p.sub}</span>`;
+    btn.onclick = () => applyPreset(p.cfg);
+    grid.appendChild(btn);
+  });
+}
+
+function applyPreset(cfg) {
+  Object.entries(cfg).forEach(([k, v]) => {
+    const el = document.getElementById(k);
+    if (el) { el.value = v; updateVal(k); }
+  });
+  generate();
+  showToast('Preset applied');
+}
+
+// ─────────────────────────────────────────
+// Offload chips
+// ─────────────────────────────────────────
+document.querySelectorAll('#offload-chips .cfg-chip').forEach(c => {
+  c.onclick = () => {
+    document.querySelectorAll('#offload-chips .cfg-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    generate();
+  };
+});
+
+function getOffload() {
+  const active = document.querySelector('#offload-chips .cfg-chip.active');
+  return active ? active.dataset.val : 'model';
+}
+
+// ─────────────────────────────────────────
+// Slider val display
+// ─────────────────────────────────────────
+function updateVal(id) {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id + '-v');
+  if (!el || !valEl) return;
+  const n = parseFloat(el.value);
+  valEl.textContent = Number.isInteger(n) ? n : n.toFixed(2);
+}
+
+// ─────────────────────────────────────────
+// Config gathering
+// ─────────────────────────────────────────
+function getConfig() {
+  return {
+    model:                `Cosmos-Transfer2.5-${document.getElementById('model-size').value}`,
+    control_variant:       document.getElementById('control-variant').value,
+    input_video:           document.getElementById('input-video').value || 'input.mp4',
+    output_video:          document.getElementById('output-video').value || 'output_cosmos.mp4',
+    output_width:          parseInt(document.getElementById('output-width').value),
+    output_height:         parseInt(document.getElementById('output-height').value),
+    prompt:                document.getElementById('pos-prompt').value || '',
+    negative_prompt:       document.getElementById('neg-prompt').value || '',
+    guidance_scale:        parseFloat(document.getElementById('guidance-scale').value),
+    temporal_consistency:  parseFloat(document.getElementById('temp-consistency').value),
+    source_video_weight:   parseFloat(document.getElementById('source-weight').value),
+    num_inference_steps:   parseInt(document.getElementById('num-steps').value),
+    num_frames:            parseInt(document.getElementById('num-frames').value),
+    batch_size:            parseInt(document.getElementById('batch-size').value),
+    seed:                  parseInt(document.getElementById('seed').value),
+    device:                document.getElementById('device').value,
+    dtype:                 document.getElementById('dtype').value,
+    offload_strategy:      getOffload(),
+    enable_xformers:       document.getElementById('enable-xformers').checked,
+    enable_vae_tiling:     document.getElementById('enable-tiling').checked,
+  };
+}
+
+// ─────────────────────────────────────────
+// Generate outputs
+// ─────────────────────────────────────────
+let currentOutput = 'yaml';
+let lastConfig = {};
+
+function generate() {
+  const c = getConfig();
+  lastConfig = c;
+
+  // Param summary
+  const estVRAM = c.model.includes('7B') ? '~12GB' : c.model.includes('14B') ? '~24GB' : '~48GB';
+  document.getElementById('param-summary').textContent = `${c.model} · ~${c.num_inference_steps} steps · VRAM ${estVRAM}`;
+
+  // ── YAML ──
+  document.getElementById('yaml-output').textContent = objToYAML(c);
+
+  // ── JSON ──
+  document.getElementById('json-output').textContent = JSON.stringify(c, null, 2);
+
+  // ── Python ──
+  document.getElementById('python-output').textContent = `from cosmos_transfer.inference import CosmosTransfer
+
+config = {
+    "model": "${c.model}",
+    "control_variant": "${c.control_variant}",
+    "input_video": "${c.input_video}",
+    "output_video": "${c.output_video}",
+    "output_size": (${c.output_width}, ${c.output_height}),
+    "prompt": """${c.prompt || 'your prompt here'}""",
+    "negative_prompt": """${c.negative_prompt || 'blurry, low quality'}""",
+    "guidance_scale": ${c.guidance_scale},
+    "temporal_consistency": ${c.temporal_consistency},
+    "source_video_weight": ${c.source_video_weight},
+    "num_inference_steps": ${c.num_inference_steps},
+    "num_frames": ${c.num_frames},
+    "batch_size": ${c.batch_size},
+    "seed": ${c.seed},
+    "device": "${c.device}",
+    "dtype": "${c.dtype}",
+    "offload_strategy": "${c.offload_strategy}",
+    "enable_xformers": ${c.enable_xformers ? 'True' : 'False'},
+    "enable_vae_tiling": ${c.enable_vae_tiling ? 'True' : 'False'},
+}
+
+pipeline = CosmosTransfer.from_pretrained("${c.model}")
+result = pipeline.run(config)
+result.save("${c.output_video}")
+print(f"Saved to ${c.output_video}")`;
+
+  // ── CLI ──
+  const prompt = c.prompt || 'your prompt here';
+  const negPrompt = c.negative_prompt || 'blurry low quality';
+  document.getElementById('cli-output').textContent =
+`# Cosmos Transfer 2.5 Inference
+# Model: ${c.model}
+
+python inference.py \\
+  --model "${c.model}" \\
+  --control-variant ${c.control_variant} \\
+  --input-video "${c.input_video}" \\
+  --output-video "${c.output_video}" \\
+  --output-size ${c.output_width}x${c.output_height} \\
+  --prompt "${prompt.substring(0,60)}${prompt.length>60?'…':''}" \\
+  --negative-prompt "${negPrompt.substring(0,40)}${negPrompt.length>40?'…':''}" \\
+  --guidance-scale ${c.guidance_scale} \\
+  --temporal-consistency ${c.temporal_consistency} \\
+  --source-video-weight ${c.source_video_weight} \\
+  --num-inference-steps ${c.num_inference_steps} \\
+  --num-frames ${c.num_frames} \\
+  --batch-size ${c.batch_size} \\
+  --seed ${c.seed} \\
+  --device ${c.device} \\
+  --dtype ${c.dtype} \\
+  --offload-strategy ${c.offload_strategy}${c.enable_xformers ? ' \\\n  --enable-xformers' : ''}${c.enable_vae_tiling ? ' \\\n  --enable-vae-tiling' : ''}`;
+
+  // ── Bash script ──
+  document.getElementById('bash-output').textContent =
+`#!/bin/bash
+# Cosmos Transfer 2.5 — Generated by CosmosConfigBuilder
+# Model: ${c.model}
+
+set -e
+
+INPUT="${c.input_video}"
+OUTPUT="${c.output_video}"
+
+echo "[Cosmos] Running inference on $INPUT"
+echo "[Cosmos] Model: ${c.model} | Steps: ${c.num_inference_steps}"
+
+python inference.py \\
+  --model "${c.model}" \\
+  --control-variant ${c.control_variant} \\
+  --input-video "$INPUT" \\
+  --output-video "$OUTPUT" \\
+  --guidance-scale ${c.guidance_scale} \\
+  --temporal-consistency ${c.temporal_consistency} \\
+  --source-video-weight ${c.source_video_weight} \\
+  --num-inference-steps ${c.num_inference_steps} \\
+  --num-frames ${c.num_frames} \\
+  --batch-size ${c.batch_size} \\
+  --seed ${c.seed} \\
+  --device ${c.device} \\
+  --dtype ${c.dtype} \\
+  --offload-strategy ${c.offload_strategy}${c.enable_xformers ? ' \\\n  --enable-xformers' : ''}
+
+echo "[Cosmos] Done! Output saved to $OUTPUT"`;
+}
+
+// ─────────────────────────────────────────
+// YAML serializer (simple, no deps)
+// ─────────────────────────────────────────
+function objToYAML(obj, indent = 0) {
+  const pad = '  '.repeat(indent);
+  return Object.entries(obj).map(([k, v]) => {
+    if (typeof v === 'string' && v.includes('\n'))
+      return `${pad}${k}: |\n${v.split('\n').map(l => pad+'  '+l).join('\n')}`;
+    if (typeof v === 'string' && (v.includes(':') || v.includes('#') || v === ''))
+      return `${pad}${k}: "${v}"`;
+    if (typeof v === 'boolean') return `${pad}${k}: ${v}`;
+    return `${pad}${k}: ${v}`;
+  }).join('\n');
+}
+
+// ─────────────────────────────────────────
+// Output tabs
+// ─────────────────────────────────────────
+function showOutput(name, btn) {
+  currentOutput = name;
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.toggle('active', t.dataset.out === name));
+  document.querySelectorAll('.output-view').forEach(v => v.classList.toggle('active', v.id === `out-${name}`));
+}
+
+// ─────────────────────────────────────────
+// Copy / download / save preset
+// ─────────────────────────────────────────
+function getCurrentText() {
+  const map = { yaml:'yaml-output', json:'json-output', python:'python-output', cli:'cli-output', bash:'bash-output' };
+  return document.getElementById(map[currentOutput])?.textContent || '';
+}
+
+function copyCurrentOutput() {
+  const text = getCurrentText();
+  navigator.clipboard.writeText(text).then(() => showToast('Copied!')).catch(() => showToast('Copy failed'));
+}
+
+function downloadCurrentOutput() {
+  const extMap = { yaml:'yaml', json:'json', python:'py', cli:'sh', bash:'sh' };
+  const ext = extMap[currentOutput] || 'txt';
+  const blob = new Blob([getCurrentText()], {type:'text/plain'});
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `cosmos-config.${ext}`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Downloaded cosmos-config.${ext}`);
+}
+
+// Save preset to localStorage
+const SAVED_PRESETS_KEY = 'cosmos-config-builder:saved-presets';
+function savePreset() {
+  const name = prompt('Preset name:', 'my-preset');
+  if (!name) return;
+  const saved = JSON.parse(localStorage.getItem(SAVED_PRESETS_KEY) || '[]');
+  saved.push({ name, config: lastConfig, savedAt: new Date().toISOString() });
+  localStorage.setItem(SAVED_PRESETS_KEY, JSON.stringify(saved));
+  showToast(`Preset "${name}" saved!`);
+}
+
+// ─────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────
+const toastEl = document.createElement('div');
+Object.assign(toastEl.style, {
+  position:'fixed', bottom:'24px', right:'24px',
+  background:'#131320', border:'1px solid rgba(129,140,248,0.4)',
+  borderRadius:'10px', padding:'10px 16px', fontSize:'13px',
+  color:'#e0e0f4', zIndex:'300', opacity:'0',
+  transform:'translateY(8px)', transition:'all 0.2s', pointerEvents:'none',
+});
+document.body.appendChild(toastEl);
+let toastT;
+function showToast(msg) {
+  toastEl.textContent = msg; toastEl.style.opacity='1'; toastEl.style.transform='translateY(0)';
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>{ toastEl.style.opacity='0'; toastEl.style.transform='translateY(8px)'; }, 2400);
+}
+
+// ─────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────
+buildPresets();
+generate();
+</script>
+</body>
+</html>

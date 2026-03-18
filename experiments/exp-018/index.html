@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AugQualityScore — Auto-Pixel-Diff Scoring for Cosmos Outputs</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #07070e; --surf: #0d0d1a; --surf2: #131320; --surf3: #181828;
+      --border: #1c1c30; --brd2: #242438; --text: #e0e0f4; --muted: #545470;
+      --accent: #7c6cfc; --acc2: #5a4de0; --green: #22c55e; --amber: #fbbf24;
+      --red: #ef4444; --cyan: #22d3ee; --r: 10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: rgba(7,7,14,0.97); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent); }
+    .header-spacer { flex: 1; }
+
+    .main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Config card ── */
+    .config-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px; margin-bottom: 20px;
+    }
+    .config-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+    .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .cfg-field label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+    input[type=text], select {
+      width: 100%; background: var(--surf2); border: 1px solid var(--brd2);
+      border-radius: 7px; color: var(--text); font-family: inherit;
+      font-size: 13px; padding: 8px 12px; outline: none; transition: border-color 0.15s;
+    }
+    input[type=text]:focus, select:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--muted); }
+
+    /* Pairs list */
+    .pairs-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .pair-row {
+      display: grid; grid-template-columns: 1fr 1fr auto;
+      gap: 8px; align-items: center;
+    }
+    .pair-row input { margin-bottom: 0; }
+    .del-btn { background: transparent; border: 1px solid var(--brd2); color: var(--muted); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .del-btn:hover { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.1); }
+
+    .btn { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--acc2); transform: translateY(-1px); }
+    .btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .btn-ghost:hover { background: var(--surf3); }
+
+    /* ── Stats bar ── */
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-bottom: 20px; }
+    .stat-box { background: var(--surf); border: 1px solid var(--border); border-radius: 9px; padding: 14px; }
+    .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-val { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    /* ── Score cards grid ── */
+    .score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 12px; }
+    .score-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+      transition: all 0.15s; cursor: pointer;
+    }
+    .score-card:hover { border-color: var(--brd2); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+
+    .card-rank { background: var(--surf2); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .rank-medal { font-size: 18px; }
+    .rank-num { font-size: 13px; font-weight: 700; }
+    .card-label { font-size: 13px; font-weight: 700; flex: 1; color: #fff; }
+
+    .card-body { padding: 14px; }
+    .score-big { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .score-sub { font-size: 11px; color: var(--muted); }
+    .score-level { font-size: 11px; font-weight: 600; margin-top: 4px; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+
+    /* Metric row */
+    .metric-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .metric-label { font-size: 11px; color: var(--muted); min-width: 80px; }
+    .metric-bar-wrap { flex: 1; height: 5px; background: var(--brd2); border-radius: 3px; overflow: hidden; }
+    .metric-bar-fill { height: 100%; border-radius: 3px; }
+    .metric-val { font-size: 11px; font-weight: 700; min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* Comparison diff thumbnail */
+    .card-diff { border-top: 1px solid var(--border); padding: 10px 14px; }
+    .diff-canvas-wrap { aspect-ratio: 16/9; background: #000; border-radius: 6px; overflow: hidden; }
+    .diff-canvas-wrap canvas { width: 100%; height: 100%; }
+    .diff-label { font-size: 10px; color: var(--muted); margin-top: 4px; text-align: center; }
+
+    /* Modal / lightbox */
+    .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.88); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--surf); border: 1px solid var(--brd2); border-radius: 14px; width: 100%; max-width: 900px; overflow: hidden; }
+    .modal-hdr { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-hdr h2 { font-size: 16px; font-weight: 700; }
+    .modal-close { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); width: 30px; height: 30px; border-radius: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .modal-body { padding: 20px; }
+
+    .modal-video-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .modal-vid-card { background: var(--surf2); border-radius: 8px; overflow: hidden; }
+    .modal-vid-card video, .modal-vid-card canvas { width: 100%; height: auto; display: block; aspect-ratio: 16/9; object-fit: contain; }
+    .modal-vid-footer { padding: 6px 10px; font-size: 11px; color: var(--muted); }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+
+    /* Progress ring */
+    .progress-ring { display: flex; gap: 10px; align-items: center; }
+    .progress-ring-text { font-size: 13px; color: var(--muted); }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surf2); border: 1px solid rgba(124,108,252,0.4); border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 800px) {
+      .config-grid { grid-template-columns: 1fr; }
+      .score-grid { grid-template-columns: 1fr; }
+      .modal-video-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Aug<span>Quality</span>Score</div>
+  <span style="font-size:12px;color:var(--muted)">Auto pixel-diff scoring for Cosmos outputs</span>
+  <div class="header-spacer"></div>
+  <button class="btn btn-ghost" onclick="exportCSV()" style="font-size:12px;padding:5px 14px">⬇ CSV</button>
+</header>
+
+<div class="main">
+
+  <!-- Config -->
+  <div class="config-card">
+    <div class="config-title">⚙️ Configuration</div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Video Pairs (Reference → Generated)</div>
+      <div class="pairs-list" id="pairs-list"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn btn-ghost" onclick="addPair()" style="font-size:12px;padding:5px 13px">+ Add Pair</button>
+      </div>
+    </div>
+    <div class="config-grid">
+      <div class="cfg-field">
+        <label>Diff Threshold (0–255)</label>
+        <input type="range" id="threshold" min="5" max="60" step="5" value="20" oninput="document.getElementById('threshold-val').textContent=this.value" style="width:100%;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--muted)">Threshold: <span id="threshold-val">20</span></span>
+      </div>
+      <div class="cfg-field">
+        <label>Diff Visualization Mode</label>
+        <select id="vis-mode">
+          <option value="heatmap">Heatmap (blue→red)</option>
+          <option value="abs">Abs grayscale</option>
+          <option value="mask">Mask (red on diff)</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="runScoring()">▶ Run Scoring</button>
+      <button class="btn btn-ghost" onclick="loadExampleData()">📋 Load Example</button>
+      <span id="scoring-progress" style="font-size:12px;color:var(--muted);align-self:center"></span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="stats-bar" style="display:none"></div>
+
+  <!-- Score cards -->
+  <div class="score-grid" id="score-grid">
+    <div class="empty">
+      <div style="font-size:40px;margin-bottom:12px">📊</div>
+      Configure video pairs and click Run Scoring
+    </div>
+  </div>
+
+</div>
+
+<!-- Detail modal -->
+<div class="modal-overlay" id="modal" onclick="closeModalIfBg(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2 id="modal-title">—</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════
+     CONFIGURATION — edit this section
+     ════════════════════════════════════ -->
+<script>
+// Default pairs loaded by the page
+// { ref: 'path/to/original.mp4', gen: 'path/to/generated.mp4', label: 'display name' }
+const DEFAULT_PAIRS = [
+  { ref: 'original.mp4',    gen: 'generated_1.mp4', label: 'Cosmos Gen v1' },
+  { ref: 'original.mp4',    gen: 'generated_2.mp4', label: 'Cosmos Gen v2' },
+  { ref: 'original.mp4',    gen: 'generated_3.mp4', label: 'Cosmos Gen v3' },
+];
+</script>
+<!-- ════════════════════════════════════ -->
+
+<script>
+// ── Build pairs UI ──
+let pairsData = [];
+
+function buildPairsUI(pairs) {
+  const list = document.getElementById('pairs-list');
+  list.innerHTML = '';
+  pairsData = [...pairs];
+  pairs.forEach((p, i) => addPairRow(p.ref, p.gen, p.label));
+}
+
+function addPair() { addPairRow('original.mp4', 'generated.mp4', 'My Gen'); }
+
+function addPairRow(ref = '', gen = '', label = '') {
+  const list = document.getElementById('pairs-list');
+  const row = document.createElement('div');
+  row.className = 'pair-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Reference video (original.mp4)" value="${ref}">
+    <input type="text" placeholder="Generated video (cosmos_v1.mp4)" value="${gen}">
+    <button class="del-btn" onclick="this.closest('.pair-row').remove()">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function getPairs() {
+  return [...document.querySelectorAll('.pair-row')].map(row => {
+    const [refEl, genEl] = row.querySelectorAll('input');
+    return { ref: refEl.value.trim(), gen: genEl.value.trim(), label: genEl.value.split('/').pop().replace('.mp4','') };
+  }).filter(p => p.ref && p.gen);
+}
+
+function loadExampleData() {
+  buildPairsUI(DEFAULT_PAIRS);
+  showToast('Example data loaded — click Run Scoring');
+}
+
+buildPairsUI(DEFAULT_PAIRS);
+
+// ── Scoring engine ──
+let results = [];
+
+async function runScoring() {
+  const pairs = getPairs();
+  if (!pairs.length) { showToast('Add some video pairs first!'); return; }
+  const threshold = parseInt(document.getElementById('threshold').value);
+
+  document.getElementById('score-grid').innerHTML = '<div class="empty"><div style="font-size:24px;margin-bottom:8px">⏳</div>Analyzing videos…</div>';
+  document.getElementById('stats-bar').style.display = 'none';
+  document.getElementById('scoring-progress').textContent = '';
+  results = [];
+
+  for (let i = 0; i < pairs.length; i++) {
+    const p = pairs[i];
+    document.getElementById('scoring-progress').textContent = `Scoring ${i+1}/${pairs.length}…`;
+    const result = await scoreVideoPair(p.ref, p.gen, p.label, threshold);
+    results.push(result);
+  }
+
+  document.getElementById('scoring-progress').textContent = '';
+  results.sort((a,b) => b.qualityScore - a.qualityScore);
+  renderResults();
+  showToast(`✓ Scored ${results.length} pairs`);
+}
+
+async function scoreVideoPair(refUrl, genUrl, label, threshold) {
+  return new Promise(resolve => {
+    const vidRef = document.createElement('video');
+    const vidGen = document.createElement('video');
+    vidRef.crossOrigin = 'anonymous'; vidGen.crossOrigin = 'anonymous';
+    vidRef.muted = true; vidGen.muted = true;
+    vidRef.src = refUrl; vidGen.src = genUrl;
+
+    let refReady = false, genReady = false;
+
+    function tryCompare() {
+      if (!refReady || !genReady) return;
+      if (!vidRef.videoWidth || !vidGen.videoWidth) {
+        resolve({ label, ref: refUrl, gen: genUrl, error: 'Could not load video(s)', qualityScore: 0 });
+        return;
+      }
+
+      const W = Math.min(vidRef.videoWidth, 320);
+      const H = Math.round(W * vidRef.videoHeight / vidRef.videoWidth);
+
+      // Sample ~10 frames from first 3 seconds
+      const sampleTimes = Array.from({length:10}, (_,i) => i * 0.3);
+      let sampleIdx = 0;
+
+      const psnrVals = [], meanDiffs = [], maxDiffs = [], changedPcts = [];
+      let diffFrameB64 = null; // worst frame
+
+      function sampleNext() {
+        if (sampleIdx >= sampleTimes.length) {
+          // All samples done
+          const avgPsnr = psnrVals.reduce((a,b)=>a+b,0) / (psnrVals.length||1);
+          const avgMean = meanDiffs.reduce((a,b)=>a+b,0) / (meanDiffs.length||1);
+          const avgMax  = maxDiffs.reduce((a,b)=>a+b,0) / (maxDiffs.length||1);
+          const avgChg  = changedPcts.reduce((a,b)=>a+b,0) / (changedPcts.length||1);
+          const qs = computeQualityScore(avgPsnr, avgMean, avgChg);
+          resolve({ label, ref:refUrl, gen:genUrl, psnr:+avgPsnr.toFixed(2), meanDiff:+avgMean.toFixed(2), maxDiff:+avgMax.toFixed(2), changedPct:+avgChg.toFixed(2), qualityScore:+qs.toFixed(1), sampleFrames:psnrVals.length, diffFrameB64, W, H });
+          return;
+        }
+
+        const t = sampleTimes[sampleIdx++];
+        vidRef.currentTime = t; vidGen.currentTime = t;
+
+        let seekedRef = false, seekedGen = false;
+        function onSeek() {
+          if (!seekedRef || !seekedGen) return;
+          const mets = computeFrameMetrics(vidRef, vidGen, W, H, threshold);
+          psnrVals.push(mets.psnr);
+          meanDiffs.push(mets.meanDiff);
+          maxDiffs.push(mets.maxDiff);
+          changedPcts.push(mets.changedPct);
+          if (!diffFrameB64 || mets.meanDiff > (meanDiffs.reduce((a,b)=>a+b,0)/meanDiffs.length)*1.1) {
+            diffFrameB64 = mets.diffB64;
+          }
+          setTimeout(sampleNext, 10);
+        }
+        vidRef.addEventListener('seeked', () => { seekedRef=true; onSeek(); }, {once:true});
+        vidGen.addEventListener('seeked', () => { seekedGen=true; onSeek(); }, {once:true});
+      }
+
+      setTimeout(sampleNext, 50);
+    }
+
+    vidRef.addEventListener('loadeddata', () => { refReady=true; tryCompare(); }, {once:true});
+    vidGen.addEventListener('loadeddata', () => { genReady=true; tryCompare(); }, {once:true});
+    vidRef.addEventListener('error', () => resolve({ label, ref:refUrl, gen:genUrl, error:'Cannot load reference', qualityScore:0 }));
+    vidGen.addEventListener('error', () => resolve({ label, ref:refUrl, gen:genUrl, error:'Cannot load generated', qualityScore:0 }));
+    vidRef.load(); vidGen.load();
+    setTimeout(() => { if (!refReady||!genReady) resolve({ label, ref:refUrl, gen:genUrl, error:'Timeout loading videos', qualityScore:0 }); }, 12000);
+  });
+}
+
+function computeFrameMetrics(vidRef, vidGen, W, H, threshold) {
+  const tmpA = document.createElement('canvas'); tmpA.width=W; tmpA.height=H;
+  const tmpB = document.createElement('canvas'); tmpB.width=W; tmpB.height=H;
+  const ctxA = tmpA.getContext('2d',{willReadFrequently:true});
+  const ctxB = tmpB.getContext('2d',{willReadFrequently:true});
+  ctxA.drawImage(vidRef,0,0,W,H); ctxB.drawImage(vidGen,0,0,W,H);
+  const dA=ctxA.getImageData(0,0,W,H); const dB=ctxB.getImageData(0,0,W,H);
+  const pA=dA.data, pB=dB.data;
+
+  // Diff canvas
+  const visMode = document.getElementById('vis-mode').value;
+  const tmpD = document.createElement('canvas'); tmpD.width=W; tmpD.height=H;
+  const ctxD = tmpD.getContext('2d');
+  const diff = ctxD.createImageData(W,H); const pD=diff.data;
+
+  let sumD=0, maxD=0, changed=0, mse=0;
+  for (let i=0; i<W*H; i++) {
+    const idx=i*4;
+    const d=(Math.abs(pA[idx]-pB[idx])+Math.abs(pA[idx+1]-pB[idx+1])+Math.abs(pA[idx+2]-pB[idx+2]))/3;
+    sumD+=d; mse+=d*d; if(d>maxD)maxD=d; if(d>threshold)changed++;
+    let r,g,b;
+    const t=Math.min(d/255,1);
+    if(visMode==='heatmap'){if(t<0.25){r=0;g=Math.round(t*4*255);b=255;}else if(t<0.5){r=0;g=255;b=Math.round((1-(t-0.25)*4)*255);}else if(t<0.75){r=Math.round((t-0.5)*4*255);g=255;b=0;}else{r=255;g=Math.round((1-(t-0.75)*4)*255);b=0;}}
+    else if(visMode==='abs'){r=g=b=Math.min(Math.round(d*3),255);}
+    else{r=d>threshold?244:pA[idx];g=d>threshold?63:pA[idx+1];b=d>threshold?94:pA[idx+2];}
+    pD[idx]=r;pD[idx+1]=g;pD[idx+2]=b;pD[idx+3]=255;
+  }
+  ctxD.putImageData(diff,0,0);
+
+  const n=W*H;
+  const psnr=mse>0?10*Math.log10(255*255/(mse/n)):Infinity;
+  return {
+    psnr: psnr===Infinity?50:psnr,
+    meanDiff: sumD/n,
+    maxDiff: maxD,
+    changedPct: changed/n*100,
+    diffB64: tmpD.toDataURL('image/jpeg',0.7).split(',')[1],
+  };
+}
+
+function computeQualityScore(psnr, meanDiff, changedPct) {
+  const psnrScore  = Math.min(psnr/50, 1) * 40;
+  const diffScore  = Math.max(0, 1 - meanDiff/128) * 30;
+  const chgScore   = Math.max(0, 1 - changedPct/100) * 30;
+  return psnrScore + diffScore + chgScore;
+}
+
+// ── Score level ──
+function scoreLevel(qs) {
+  if (qs >= 85) return { label: 'Excellent', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' };
+  if (qs >= 70) return { label: 'Good', color: '#84cc16', bg: 'rgba(132,204,22,0.12)' };
+  if (qs >= 50) return { label: 'OK', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' };
+  if (qs >= 30) return { label: 'Poor', color: '#f97316', bg: 'rgba(249,115,22,0.12)' };
+  return { label: 'Bad', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' };
+}
+
+function scoreColor(qs) {
+  const p = qs/100;
+  return p < 0.5 ? `rgb(240,${Math.round(p*2*155+52)},52)` : `rgb(${Math.round((1-(p-0.5)*2)*240)},207,52)`;
+}
+
+// ── Render results ──
+function renderResults() {
+  if (!results.length) return;
+  const valid = results.filter(r => !r.error);
+
+  // Stats
+  const avgQS = valid.reduce((a,r)=>a+r.qualityScore,0) / (valid.length||1);
+  const avgPSNR = valid.reduce((a,r)=>a+r.psnr,0) / (valid.length||1);
+  const best = results[0];
+
+  document.getElementById('stats-bar').style.display = '';
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat-box"><div class="stat-lbl">Pairs Scored</div><div class="stat-val" style="color:var(--accent)">${results.length}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Best Score</div><div class="stat-val" style="color:${scoreColor(best.qualityScore)}">${best.qualityScore}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Avg Quality</div><div class="stat-val" style="color:${scoreColor(avgQS)}">${avgQS.toFixed(1)}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Avg PSNR</div><div class="stat-val">${avgPSNR.toFixed(1)} dB</div></div>
+    <div class="stat-box"><div class="stat-lbl">Top Pick</div><div class="stat-val" style="font-size:13px;margin-top:5px">${best.label}</div></div>
+  `;
+
+  const grid = document.getElementById('score-grid');
+  grid.innerHTML = '';
+
+  results.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'score-card';
+
+    if (r.error) {
+      card.innerHTML = `<div class="card-rank"><span class="rank-num" style="color:var(--red)">${i+1}</span><span class="card-label">${r.label}</span></div><div class="card-body"><div style="color:var(--red);font-size:12px">⚠ ${r.error}</div></div>`;
+      grid.appendChild(card);
+      return;
+    }
+
+    const rank = i+1;
+    const medal = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'';
+    const qs = r.qualityScore;
+    const c = scoreColor(qs);
+    const lvl = scoreLevel(qs);
+
+    const psnrPct = Math.min(r.psnr/50*100,100).toFixed(1);
+    const meanPct = Math.max(0,100-r.meanDiff/128*100).toFixed(1);
+    const chgPct  = Math.max(0,100-r.changedPct).toFixed(1);
+
+    card.innerHTML = `
+      <div class="card-rank">
+        ${medal ? `<span class="rank-medal">${medal}</span>` : `<span class="rank-num" style="color:var(--muted)">${rank}</span>`}
+        <span class="card-label">${r.label}</span>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+          <span class="score-big" style="color:${c}">${qs}</span>
+          <span class="score-sub">/100</span>
+          <span class="score-level" style="background:${lvl.bg};color:${lvl.color}">${lvl.label}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">PSNR</span>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" style="width:${psnrPct}%;background:${c}"></div></div>
+          <span class="metric-val" style="color:${c}">${r.psnr.toFixed(1)} dB</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Low Diff</span>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" style="width:${meanPct}%;background:${c}"></div></div>
+          <span class="metric-val" style="color:${c}">${r.meanDiff.toFixed(1)}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Preserved</span>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" style="width:${chgPct}%;background:${c}"></div></div>
+          <span class="metric-val" style="color:${c}">${(100-r.changedPct).toFixed(1)}%</span>
+        </div>
+      </div>
+      ${r.diffFrameB64 ? `<div class="card-diff">
+        <div class="diff-canvas-wrap"><img src="data:image/jpeg;base64,${r.diffFrameB64}" style="width:100%;height:100%;object-fit:contain;display:block"></div>
+        <div class="diff-label">Diff frame sample · ${r.W}×${r.H}</div>
+      </div>` : ''}
+    `;
+    card.onclick = () => openModal(r);
+    grid.appendChild(card);
+  });
+}
+
+// ── Modal ──
+function openModal(r) {
+  document.getElementById('modal-title').textContent = `${r.label} — Detailed Analysis`;
+  const qs = r.qualityScore;
+  const c = scoreColor(qs);
+  const lvl = scoreLevel(qs);
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px">
+      <div>
+        <div style="font-size:28px;font-weight:900;color:${c}">${qs}<span style="font-size:14px;color:var(--muted)">/100</span></div>
+        <span style="font-size:12px;padding:3px 10px;border-radius:4px;background:${lvl.bg};color:${lvl.color}">${lvl.label}</span>
+        <div style="margin-top:12px;font-size:13px;color:var(--muted);line-height:1.7">
+          <div>PSNR: <strong style="color:#fff">${r.psnr.toFixed(2)} dB</strong></div>
+          <div>Mean diff: <strong style="color:#fff">${r.meanDiff.toFixed(2)}</strong></div>
+          <div>Max diff: <strong style="color:#fff">${r.maxDiff.toFixed(2)}</strong></div>
+          <div>Changed pixels: <strong style="color:#fff">${r.changedPct.toFixed(2)}%</strong></div>
+          <div>Frames sampled: <strong style="color:#fff">${r.sampleFrames}</strong></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Files</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7">
+          Reference: <span style="color:var(--cyan)">${r.ref}</span><br>
+          Generated: <span style="color:var(--accent)">${r.gen}</span>
+        </div>
+      </div>
+    </div>
+    ${r.diffFrameB64 ? `<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)"><img src="data:image/jpeg;base64,${r.diffFrameB64}" style="width:100%;display:block"><div style="padding:6px 10px;font-size:11px;color:var(--muted);background:var(--surf2)">Diff frame (ref | diff | gen)</div></div>` : ''}
+  `;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function closeModalIfBg(e) { if (e.target===document.getElementById('modal')) closeModal(); }
+
+// ── CSV export ──
+function exportCSV() {
+  if (!results.length) { showToast('Run scoring first!'); return; }
+  const cols = ['label','ref','gen','qualityScore','psnr','meanDiff','maxDiff','changedPct','sampleFrames'];
+  const rows = results.map(r => cols.map(k => JSON.stringify(r[k]??'')).join(','));
+  const csv = [cols.join(','),...rows].join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'aug-quality-scores.csv'});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${results.length} results`);
+}
+
+// ── Toast ──
+let toastT;
+function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2400); }
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+</script>
+</body>
+</html>

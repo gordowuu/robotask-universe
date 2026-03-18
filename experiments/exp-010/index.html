@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AugmentationMatrix — Robot Video Augmentation Comparison Grid</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #070710;
+      --surf:   #0d0d1a;
+      --surf2:  #131320;
+      --surf3:  #1a1a2a;
+      --border: #1c1c30;
+      --brd2:   #242438;
+      --text:   #e0e0f4;
+      --muted:  #545470;
+      --accent: #7c6cfc;
+      --acc2:   #5a4de0;
+      --cyan:   #22d3ee;
+      --green:  #34d399;
+      --amber:  #fbbf24;
+      --pink:   #f472b6;
+      --r:      8px;
+    }
+
+    html, body { min-height: 100%; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
+
+    /* ── Header ── */
+    header {
+      background: rgba(7,7,16,0.97);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 11px 24px;
+      display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 40;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo-aug { color: var(--amber); }
+    .logo-matrix { color: #fff; }
+    .header-spacer { flex: 1; }
+
+    .hdr-btn {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); padding: 5px 13px;
+      border-radius: 7px; font-size: 12px; cursor: pointer;
+      transition: all 0.12s;
+    }
+    .hdr-btn:hover { background: var(--surf3); }
+    .hdr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: var(--surf);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 24px;
+      display: flex; align-items: center; gap: 10px;
+      flex-wrap: wrap;
+    }
+    .tool-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .tool-select {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); font-size: 12px; padding: 4px 10px;
+      border-radius: 6px; outline: none; cursor: pointer;
+    }
+    .playall-btn {
+      padding: 5px 14px; border-radius: 7px; font-size: 12px;
+      font-weight: 600; cursor: pointer; border: none; transition: all 0.12s;
+    }
+    .playall-btn.play  { background: var(--accent); color: #fff; }
+    .playall-btn.pause { background: var(--surf3); border: 1px solid var(--brd2); color: var(--text); }
+
+    /* ── Matrix ── */
+    .matrix-wrap { padding: 20px 24px; overflow-x: auto; }
+
+    .matrix-table {
+      border-collapse: separate;
+      border-spacing: 8px;
+      min-width: max-content;
+    }
+
+    /* Row/col header cells */
+    .row-header, .col-header {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 7px;
+      white-space: nowrap;
+    }
+    .row-header {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      color: var(--text);
+      text-align: right;
+      vertical-align: middle;
+      max-width: 160px;
+    }
+    .row-header .row-label { font-size: 13px; font-weight: 700; color: #fff; }
+    .row-header .row-task  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .col-header {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      text-align: center;
+      color: var(--muted);
+      vertical-align: bottom;
+    }
+    .col-header .col-aug  { font-size: 12px; font-weight: 700; color: var(--text); }
+    .col-header .col-sub  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .col-header .col-tag {
+      display: inline-block;
+      font-size: 10px; padding: 1px 6px;
+      border-radius: 4px; margin-top: 4px;
+    }
+
+    /* Origin corner cell */
+    .corner-cell {
+      background: var(--surf2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ── Video cells ── */
+    .matrix-cell {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      width: 200px;
+      vertical-align: top;
+      transition: border-color 0.15s;
+      cursor: pointer;
+    }
+    .matrix-cell:hover { border-color: var(--brd2); }
+    .matrix-cell.original-col { border-color: rgba(34,211,238,0.2); }
+    .matrix-cell.highlighted  { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+    .cell-video-wrap { aspect-ratio: 16/9; background: #000; position: relative; overflow: hidden; }
+    .cell-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cell-video-wrap canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* Play indicator on hover */
+    .cell-play-icon {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.4);
+      opacity: 0; transition: opacity 0.12s;
+      font-size: 28px;
+    }
+    .matrix-cell:hover .cell-play-icon { opacity: 1; }
+
+    /* Missing cell */
+    .cell-missing {
+      width: 200px;
+      aspect-ratio: 16/9;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 11px;
+      background: var(--surf2);
+      border-radius: var(--r);
+    }
+
+    .cell-footer {
+      padding: 6px 9px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .cell-label { font-size: 11px; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cell-time  { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* Diff badge on cell (vs original) */
+    .diff-badge {
+      position: absolute; bottom: 4px; right: 4px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 4px; padding: 1px 5px;
+      font-size: 10px; font-weight: 700;
+      display: none;
+    }
+
+    /* ── Scrubber at bottom ── */
+    .global-scrubber {
+      position: sticky; bottom: 0;
+      background: rgba(7,7,16,0.96);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .scr-t { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
+    input[type=range]#global-scr {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px;
+      background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct, 0%), var(--brd2) var(--pct, 0%), var(--brd2) 100%);
+      outline: none; cursor: pointer;
+    }
+    input[type=range]#global-scr::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .scr-btn {
+      background: var(--surf2); border: 1px solid var(--brd2); color: var(--text);
+      padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    }
+    .scr-btn:hover { background: var(--surf3); }
+    .scr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .speed-grp { display: flex; gap: 3px; }
+
+    /* ── Lightbox ── */
+    .lb {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.92); backdrop-filter: blur(16px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .lb.open { opacity: 1; pointer-events: all; }
+    .lb-inner {
+      background: var(--surf); border: 1px solid var(--brd2);
+      border-radius: 12px; overflow: hidden; width: 100%; max-width: 800px;
+    }
+    .lb-video-wrap { aspect-ratio: 16/9; background: #000; }
+    .lb-video-wrap video { width: 100%; height: 100%; object-fit: contain; }
+    .lb-footer {
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid var(--border);
+    }
+    .lb-info h3 { font-size: 14px; font-weight: 700; }
+    .lb-info p  { font-size: 12px; color: var(--muted); }
+    .lb-close {
+      position: fixed; top: 20px; right: 24px;
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); width: 34px; height: 34px;
+      border-radius: 8px; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 110;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 72px; right: 24px;
+      background: var(--surf2); border: 1px solid rgba(124,108,252,0.4);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      z-index: 300; opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 700px) {
+      .matrix-cell { width: 140px; }
+      header, .toolbar { padding: 8px 14px; }
+      .matrix-wrap { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-aug">Aug</span><span class="logo-matrix">Matrix</span></div>
+  <span style="font-size:12px;color:var(--muted)">Augmentation Comparison Grid</span>
+  <div class="header-spacer"></div>
+  <button class="hdr-btn" id="play-all-btn" onclick="togglePlayAll()">▶ Play All</button>
+  <button class="hdr-btn" onclick="restartAll()">↺ Restart</button>
+  <button class="hdr-btn" onclick="toggleDiffOverlay()" id="diff-btn">🔥 Diff Overlay</button>
+</header>
+
+<div class="toolbar">
+  <span class="tool-label">Speed:</span>
+  <div class="speed-grp">
+    <button class="hdr-btn speed-scr-btn" onclick="setGlobalSpeed(0.25)">¼×</button>
+    <button class="hdr-btn speed-scr-btn" onclick="setGlobalSpeed(0.5)">½×</button>
+    <button class="hdr-btn speed-scr-btn active" onclick="setGlobalSpeed(1)">1×</button>
+    <button class="hdr-btn speed-scr-btn" onclick="setGlobalSpeed(2)">2×</button>
+  </div>
+  <span class="tool-label" style="margin-left:8px">Highlight:</span>
+  <select class="tool-select" id="highlight-select" onchange="highlightColumn(this.value)">
+    <option value="">None</option>
+  </select>
+  <div style="margin-left:auto;font-size:12px;color:var(--muted)" id="matrix-info"></div>
+</div>
+
+<div class="matrix-wrap">
+  <table class="matrix-table" id="matrix-table"></table>
+</div>
+
+<!-- Sticky global scrubber -->
+<div class="global-scrubber">
+  <span class="scr-t" id="g-cur">0:00</span>
+  <input type="range" id="global-scr" min="0" max="100" step="0.1" value="0">
+  <span class="scr-t" id="g-dur">0:00</span>
+  <span style="font-size:12px;color:var(--muted);margin-left:8px">Space=play · R=restart · ←→=±3s · [/]=speed</span>
+</div>
+
+<!-- Lightbox -->
+<div class="lb" id="lb">
+  <button class="lb-close" onclick="closeLB()">✕</button>
+  <div class="lb-inner">
+    <div class="lb-video-wrap"><video id="lb-vid" playsinline loop muted autoplay></video></div>
+    <div class="lb-footer">
+      <div class="lb-info"><h3 id="lb-name">—</h3><p id="lb-desc">—</p></div>
+      <button class="hdr-btn" onclick="closeLB()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════
+     MATRIX CONFIGURATION — edit this section
+     ════════════════════════════════════════════════ -->
+<script>
+// Rows = original demo episodes
+// Replace with your own video URLs
+const ROWS = [
+  { id: 'ep1', label: 'Episode 1', task: 'Sweater fold — standard',   originalFile: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4' },
+  { id: 'ep2', label: 'Episode 2', task: 'Sweater fold — crumpled',   originalFile: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4' },
+  { id: 'ep3', label: 'Episode 3', task: 'Drawer open — top',        originalFile: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4' },
+  { id: 'ep4', label: 'Episode 4', task: 'Pick & place — bin',       originalFile: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4' },
+];
+
+// Columns = augmentation types
+// file: function (rowId) => URL
+const _augUrls = {
+  ep1: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
+  ep2: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
+  ep3: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+  ep4: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+};
+const COLS = [
+  {
+    id: 'original',
+    label: 'Original',
+    sub: 'Baseline',
+    tag: 'original', tagColor: '#22d3ee',
+    file: (rowId) => `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4`,
+  },
+  {
+    id: 'bright-day',
+    label: 'Bright Day',
+    sub: 'Cosmos · lighting',
+    tag: 'cosmos', tagColor: '#a78bfa',
+    file: (rowId) => _augUrls[rowId],
+  },
+  {
+    id: 'dim-ambient',
+    label: 'Dim Ambient',
+    sub: 'Cosmos · lighting',
+    tag: 'cosmos', tagColor: '#a78bfa',
+    file: (rowId) => _augUrls[rowId],
+  },
+  {
+    id: 'industrial',
+    label: 'Industrial',
+    sub: 'Cosmos · env',
+    tag: 'cosmos', tagColor: '#a78bfa',
+    file: (rowId) => _augUrls[rowId],
+  },
+  {
+    id: 'clean-lab',
+    label: 'Clean Lab',
+    sub: 'Cosmos · env',
+    tag: 'cosmos', tagColor: '#a78bfa',
+    file: (rowId) => _augUrls[rowId],
+  },
+  {
+    id: 'cinematic',
+    label: 'Cinematic',
+    sub: 'Cosmos · style',
+    tag: 'cosmos', tagColor: '#a78bfa',
+    file: (rowId) => _augUrls[rowId],
+  },
+];
+</script>
+<!-- ════════════════════════════════════════════════ -->
+
+<script>
+// ── State ──
+let allVideos = [];  // flat list of all video elements
+let isPlayingAll = false;
+let globalSpeed  = 1;
+let scrubDrag    = false;
+let diffOverlay  = false;
+let highlightCol = '';
+
+const scrubber = document.getElementById('global-scr');
+const gCur = document.getElementById('g-cur');
+const gDur = document.getElementById('g-dur');
+
+function fmtT(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+
+// ── Build highlight dropdown ──
+const hlSelect = document.getElementById('highlight-select');
+COLS.forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = c.id; opt.textContent = c.label;
+  hlSelect.appendChild(opt);
+});
+
+// ── Build matrix ──
+function buildMatrix() {
+  allVideos = [];
+  const table = document.getElementById('matrix-table');
+  table.innerHTML = '';
+
+  // Header row
+  const hRow = document.createElement('tr');
+  const corner = document.createElement('td');
+  corner.className = 'corner-cell';
+  corner.innerHTML = `Demo / Augmentation<br><span style="font-size:10px">click cell to expand</span>`;
+  hRow.appendChild(corner);
+  COLS.forEach(col => {
+    const th = document.createElement('td');
+    th.className = 'col-header';
+    th.innerHTML = `
+      <div class="col-aug">${col.label}</div>
+      <div class="col-sub">${col.sub}</div>
+      <span class="col-tag" style="background:${col.tagColor}22;color:${col.tagColor};border:1px solid ${col.tagColor}44">${col.tag}</span>
+    `;
+    hRow.appendChild(th);
+  });
+  table.appendChild(hRow);
+
+  // Data rows
+  ROWS.forEach(row => {
+    const tr = document.createElement('tr');
+
+    // Row header
+    const rh = document.createElement('td');
+    rh.className = 'row-header';
+    rh.innerHTML = `<div class="row-label">${row.label}</div><div class="row-task">${row.task}</div>`;
+    tr.appendChild(rh);
+
+    // Cells
+    COLS.forEach((col, ci) => {
+      const td = document.createElement('td');
+      const file = col.file(row.id);
+
+      const cell = document.createElement('div');
+      cell.className = `matrix-cell${col.id === 'original' ? ' original-col' : ''}`;
+      cell.dataset.rowId = row.id;
+      cell.dataset.colId = col.id;
+
+      cell.innerHTML = `
+        <div class="cell-video-wrap">
+          <video src="${file}" playsinline muted loop preload="metadata" data-cell="${row.id}-${col.id}"></video>
+          <canvas class="diff-canvas" style="display:none"></canvas>
+          <div class="cell-play-icon">▶</div>
+          <div class="diff-badge" id="dbadge-${row.id}-${col.id}">DIFF</div>
+        </div>
+        <div class="cell-footer">
+          <span class="cell-label">${col.id === 'original' ? row.label : col.label}</span>
+          <span class="cell-time" id="ctime-${row.id}-${col.id}">0:00</span>
+        </div>
+      `;
+
+      const video = cell.querySelector('video');
+      allVideos.push(video);
+
+      // Duration display
+      video.addEventListener('loadedmetadata', () => {
+        if (row.id === ROWS[0].id) { // first row drives global scrubber
+          const dur = video.duration || 0;
+          scrubber.max = dur;
+          gDur.textContent = fmtT(dur);
+        }
+      });
+
+      // Cell click → open lightbox
+      cell.onclick = () => openLB(file, `${row.label} — ${col.label}`, `${col.sub} · ${row.task}`);
+      cell.querySelector('.cell-play-icon').onclick = (e) => {
+        e.stopPropagation();
+        if (video.paused) { video.playbackRate = globalSpeed; video.play(); }
+        else video.pause();
+      };
+
+      td.appendChild(cell);
+      tr.appendChild(td);
+    });
+
+    table.appendChild(tr);
+  });
+
+  document.getElementById('matrix-info').textContent =
+    `${ROWS.length} demos × ${COLS.length} augmentations = ${ROWS.length * COLS.length} cells`;
+
+  // Start time update loop
+  startTimeLoop();
+  // Auto-play
+  setTimeout(() => {
+    allVideos.forEach(v => v.play().catch(()=>{}));
+    isPlayingAll = true;
+    document.getElementById('play-all-btn').textContent = '⏸ Pause All';
+  }, 100);
+}
+
+// ── Time loop ──
+let timeLoopRaf;
+function startTimeLoop() {
+  cancelAnimationFrame(timeLoopRaf);
+  function loop() {
+    // Update cell times
+    allVideos.forEach(v => {
+      const key = v.dataset.cell;
+      const el  = document.getElementById(`ctime-${key}`);
+      if (el) el.textContent = fmtT(v.currentTime);
+    });
+    // Update global scrubber (from first video in first row)
+    const ref = allVideos[0];
+    if (ref && !scrubDrag) {
+      scrubber.value = ref.currentTime;
+      gCur.textContent = fmtT(ref.currentTime);
+      const pct = ref.duration ? (ref.currentTime / ref.duration * 100).toFixed(2) : 0;
+      scrubber.style.setProperty('--pct', pct + '%');
+    }
+    timeLoopRaf = requestAnimationFrame(loop);
+  }
+  timeLoopRaf = requestAnimationFrame(loop);
+}
+
+// ── Play all ──
+function togglePlayAll() {
+  isPlayingAll = !isPlayingAll;
+  allVideos.forEach(v => { isPlayingAll ? v.play().catch(()=>{}) : v.pause(); });
+  document.getElementById('play-all-btn').textContent = isPlayingAll ? '⏸ Pause All' : '▶ Play All';
+}
+
+function restartAll() {
+  allVideos.forEach(v => { v.currentTime = 0; v.playbackRate = globalSpeed; v.play().catch(()=>{}); });
+  isPlayingAll = true;
+  document.getElementById('play-all-btn').textContent = '⏸ Pause All';
+}
+
+// ── Speed ──
+const speedVals = [0.25, 0.5, 1, 2];
+function setGlobalSpeed(s) {
+  globalSpeed = s;
+  allVideos.forEach(v => { v.playbackRate = s; });
+  document.querySelectorAll('.speed-scr-btn').forEach((b, i) => {
+    b.classList.toggle('active', speedVals[i] === s);
+  });
+}
+
+// ── Global scrubber ──
+scrubber.addEventListener('mousedown', () => { scrubDrag = true; });
+scrubber.addEventListener('touchstart', () => { scrubDrag = true; }, { passive: true });
+scrubber.addEventListener('input', () => {
+  const t = parseFloat(scrubber.value);
+  gCur.textContent = fmtT(t);
+  const pct = (allVideos[0]?.duration ? t / allVideos[0].duration * 100 : 0).toFixed(2);
+  scrubber.style.setProperty('--pct', pct + '%');
+});
+function commitScrub() {
+  const t = parseFloat(scrubber.value);
+  allVideos.forEach(v => { v.currentTime = t; });
+  scrubDrag = false;
+}
+scrubber.addEventListener('change', commitScrub);
+scrubber.addEventListener('mouseup', commitScrub);
+scrubber.addEventListener('touchend', commitScrub);
+
+// ── Column highlight ──
+function highlightColumn(colId) {
+  highlightCol = colId;
+  document.querySelectorAll('.matrix-cell').forEach(c => {
+    c.classList.toggle('highlighted', colId && c.dataset.colId === colId);
+  });
+}
+
+// ── Diff overlay (basic: show visual diff canvas on each cell vs original col) ──
+function toggleDiffOverlay() {
+  diffOverlay = !diffOverlay;
+  document.getElementById('diff-btn').classList.toggle('active', diffOverlay);
+  document.getElementById('diff-btn').textContent = diffOverlay ? '🔥 Diff ON' : '🔥 Diff Overlay';
+
+  document.querySelectorAll('.diff-canvas').forEach(c => {
+    c.style.display = diffOverlay && c.closest('.matrix-cell')?.dataset.colId !== 'original' ? '' : 'none';
+  });
+
+  if (diffOverlay) {
+    // Run diff computation loop
+    runDiffLoop();
+  }
+}
+
+let diffRaf;
+function runDiffLoop() {
+  if (!diffOverlay) return;
+  // For each non-original cell, compute diff vs the original cell in the same row
+  ROWS.forEach(row => {
+    const origCell = document.querySelector(`[data-row-id="${row.id}"][data-col-id="original"]`);
+    const origVid  = origCell?.querySelector('video');
+    if (!origVid || !origVid.videoWidth) return;
+
+    const W = origVid.videoWidth, H = origVid.videoHeight;
+    const tmpA = document.createElement('canvas'); tmpA.width = W; tmpA.height = H;
+    const ctxA = tmpA.getContext('2d', {willReadFrequently:true});
+    ctxA.drawImage(origVid, 0, 0, W, H);
+    const dataA = ctxA.getImageData(0, 0, W, H);
+
+    COLS.forEach(col => {
+      if (col.id === 'original') return;
+      const cell = document.querySelector(`[data-row-id="${row.id}"][data-col-id="${col.id}"]`);
+      if (!cell) return;
+      const vid  = cell.querySelector('video');
+      const cnvs = cell.querySelector('.diff-canvas');
+      if (!vid || !vid.videoWidth || cnvs.style.display === 'none') return;
+
+      cnvs.width = W; cnvs.height = H;
+      const ctxB = document.createElement('canvas');
+      ctxB.width = W; ctxB.height = H;
+      const ctx2 = ctxB.getContext('2d', {willReadFrequently:true});
+      ctx2.drawImage(vid, 0, 0, W, H);
+      const dataB = ctx2.getImageData(0, 0, W, H);
+
+      const ctxD = cnvs.getContext('2d', {willReadFrequently:true});
+      const diff = ctxD.createImageData(W, H);
+      const pA = dataA.data, pB = dataB.data, pD = diff.data;
+
+      for (let i = 0; i < W * H; i++) {
+        const idx = i * 4;
+        const d = (Math.abs(pA[idx]-pB[idx]) + Math.abs(pA[idx+1]-pB[idx+1]) + Math.abs(pA[idx+2]-pB[idx+2])) / 3;
+        const t = d / 255;
+        let r,g,b;
+        if (t < 0.1) { pD[idx]=0; pD[idx+1]=0; pD[idx+2]=0; pD[idx+3]=0; continue; }
+        if (t < 0.5) { r=0; g=Math.round(t*2*255); b=255; }
+        else { r=Math.round((t-0.5)*2*255); g=255; b=0; }
+        pD[idx]=r; pD[idx+1]=g; pD[idx+2]=b; pD[idx+3]=Math.min(200, Math.round(t*255));
+      }
+      ctxD.putImageData(diff, 0, 0);
+    });
+  });
+
+  diffRaf = requestAnimationFrame(runDiffLoop);
+}
+
+// ── Lightbox ──
+function openLB(file, name, desc) {
+  const v = document.getElementById('lb-vid');
+  v.src = file; v.play().catch(()=>{});
+  v.playbackRate = globalSpeed;
+  document.getElementById('lb-name').textContent = name;
+  document.getElementById('lb-desc').textContent = desc;
+  document.getElementById('lb').classList.add('open');
+}
+function closeLB() {
+  document.getElementById('lb').classList.remove('open');
+  document.getElementById('lb-vid').pause();
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  switch (e.key) {
+    case ' ':
+      e.preventDefault();
+      togglePlayAll();
+      break;
+    case 'r': case 'R':
+      restartAll();
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      allVideos.forEach(v => v.currentTime = Math.max(0, v.currentTime - 3));
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      allVideos.forEach(v => v.currentTime = Math.min(v.duration||999, v.currentTime + 3));
+      break;
+    case '[':
+      { const i = speedVals.indexOf(globalSpeed); if (i > 0) setGlobalSpeed(speedVals[i-1]); break; }
+    case ']':
+      { const i = speedVals.indexOf(globalSpeed); if (i < speedVals.length-1) setGlobalSpeed(speedVals[i+1]); break; }
+    case 'Escape':
+      closeLB();
+      break;
+  }
+});
+
+// ── Toast ──
+let toastT;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+// ── Init ──
+buildMatrix();
+</script>
+</body>
+</html>

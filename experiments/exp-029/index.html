@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABTestRunner — Robot Policy A/B Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#252525;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a;
+  --policyA:#2997ff;--policyB:#bf5af2}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;min-height:100vh}
+
+header{padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--accent)}
+.header-actions{display:flex;gap:8px}
+.btn{padding:7px 16px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.8rem;font-family:inherit;transition:all .15s}
+.btn:hover{border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#1a8aef}
+
+.container{max-width:1100px;margin:0 auto;padding:24px}
+
+/* Input Section */
+.input-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.input-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.input-panel h3{font-size:.85rem;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.input-panel h3 .dot{width:10px;height:10px;border-radius:50%}
+textarea{width:100%;padding:10px;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:8px;font-size:.78rem;font-family:'SF Mono',Monaco,monospace;line-height:1.5;resize:vertical;min-height:80px}
+textarea:focus{border-color:var(--accent);outline:none}
+input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:6px;font-size:.82rem;font-family:inherit;margin-bottom:8px}
+input[type=text]:focus{border-color:var(--accent);outline:none}
+
+/* Results */
+.verdict-banner{padding:20px 24px;border-radius:12px;text-align:center;margin-bottom:24px;border:1px solid}
+.verdict-banner h2{font-size:1.3rem;font-weight:700;margin-bottom:4px}
+.verdict-banner p{font-size:.88rem}
+.verdict-a{background:rgba(41,151,255,.08);border-color:rgba(41,151,255,.3);color:var(--policyA)}
+.verdict-b{background:rgba(191,90,242,.08);border-color:rgba(191,90,242,.3);color:var(--policyB)}
+.verdict-tie{background:rgba(255,214,10,.08);border-color:rgba(255,214,10,.3);color:var(--yellow)}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+.stat-card{padding:14px;border-radius:10px;background:var(--card);border:1px solid var(--border);text-align:center}
+.stat-value{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-label{font-size:.68rem;color:var(--dim);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+
+/* Charts */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.chart-panel.full{grid-column:1/-1}
+.chart-title{font-size:.82rem;font-weight:600;margin-bottom:12px}
+.chart-container{position:relative;height:260px}
+
+/* Task Breakdown Table */
+.task-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.task-table th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--dim);font-size:.7rem;text-transform:uppercase}
+.task-table td{padding:8px 12px;border-bottom:1px solid var(--border)}
+.task-table tr:hover td{background:rgba(255,255,255,.02)}
+.winner-a{color:var(--policyA);font-weight:600}
+.winner-b{color:var(--policyB);font-weight:600}
+.winner-tie{color:var(--yellow)}
+
+/* CI bar */
+.ci-bar{display:flex;align-items:center;gap:4px;margin-top:4px}
+.ci-track{flex:1;height:12px;background:rgba(255,255,255,.04);border-radius:6px;position:relative;overflow:hidden}
+.ci-fill-a{position:absolute;left:0;top:0;bottom:0;background:var(--policyA);border-radius:6px 0 0 6px;opacity:.7}
+.ci-fill-b{position:absolute;right:0;top:0;bottom:0;background:var(--policyB);border-radius:0 6px 6px 0;opacity:.7}
+.ci-center{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg);left:50%}
+
+.hidden{display:none}
+
+@media(max-width:700px){
+  .input-grid,.charts-grid{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚖️ <span>ABTestRunner</span></h1>
+  <div class="header-actions">
+    <button class="btn" onclick="loadDemo()">Load Demo Data</button>
+    <button class="btn btn-primary" onclick="runTest()">▶ Run A/B Test</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="input-grid">
+    <div class="input-panel">
+      <h3><span class="dot" style="background:var(--policyA)"></span> Policy A</h3>
+      <input type="text" id="nameA" placeholder="Policy name (e.g., baseline_v2)" value="">
+      <textarea id="dataA" placeholder='Paste JSON results: [{"task":"pick","success":true,"duration":12.3}, ...]'></textarea>
+    </div>
+    <div class="input-panel">
+      <h3><span class="dot" style="background:var(--policyB)"></span> Policy B</h3>
+      <input type="text" id="nameB" placeholder="Policy name (e.g., cosmos_ft_v3)" value="">
+      <textarea id="dataB" placeholder='Same format as Policy A'></textarea>
+    </div>
+  </div>
+  
+  <div id="results" class="hidden">
+    <div id="verdictBanner"></div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="charts-grid" id="chartsGrid"></div>
+    <div class="chart-panel full" id="tablePanel">
+      <div class="chart-title">📋 Per-Task Comparison</div>
+      <table class="task-table">
+        <thead><tr><th>Task</th><th>Policy A Win %</th><th>Policy B Win %</th><th>Difference</th><th>p-value</th><th>Winner</th></tr></thead>
+        <tbody id="taskTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+Chart.defaults.color = '#86868b';
+Chart.defaults.borderColor = '#252525';
+Chart.defaults.font.family = "-apple-system,sans-serif";
+Chart.defaults.font.size = 11;
+
+let charts = {};
+
+function loadDemo() {
+  const tasks = ['pick_red_cube','place_on_plate','stack_blocks','push_to_target','pick_and_insert','close_drawer'];
+  
+  function genResults(tasks, successRates) {
+    const results = [];
+    tasks.forEach((task, i) => {
+      const n = 30 + Math.floor(Math.random() * 20);
+      for(let j = 0; j < n; j++) {
+        results.push({
+          task,
+          success: Math.random() < successRates[i],
+          duration: 5 + Math.random() * 25,
+          reward: successRates[i] * 80 + (Math.random() - 0.5) * 30
+        });
+      }
+    });
+    return results;
+  }
+  
+  const aRates = [0.72, 0.68, 0.55, 0.82, 0.48, 0.75];
+  const bRates = [0.85, 0.78, 0.62, 0.80, 0.71, 0.88];
+  
+  document.getElementById('nameA').value = 'baseline_v2';
+  document.getElementById('nameB').value = 'cosmos_ft_v3';
+  document.getElementById('dataA').value = JSON.stringify(genResults(tasks, aRates));
+  document.getElementById('dataB').value = JSON.stringify(genResults(tasks, bRates));
+}
+
+function runTest() {
+  let dataA, dataB;
+  try { dataA = JSON.parse(document.getElementById('dataA').value); } catch(e) { alert('Invalid JSON for Policy A'); return; }
+  try { dataB = JSON.parse(document.getElementById('dataB').value); } catch(e) { alert('Invalid JSON for Policy B'); return; }
+  
+  const nameA = document.getElementById('nameA').value || 'Policy A';
+  const nameB = document.getElementById('nameB').value || 'Policy B';
+  
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  
+  document.getElementById('results').classList.remove('hidden');
+  
+  // Aggregate by task
+  const tasksA = groupByTask(dataA);
+  const tasksB = groupByTask(dataB);
+  const allTasks = [...new Set([...Object.keys(tasksA), ...Object.keys(tasksB)])].sort();
+  
+  // Overall stats
+  const overallA = { wins: 0, total: dataA.length, successes: dataA.filter(d => d.success).length };
+  const overallB = { wins: 0, total: dataB.length, successes: dataB.filter(d => d.success).length };
+  overallA.rate = overallA.successes / overallA.total;
+  overallB.rate = overallB.successes / overallB.total;
+  
+  // Per-task comparison
+  const taskResults = allTasks.map(task => {
+    const a = tasksA[task] || { success: 0, total: 0, rate: 0 };
+    const b = tasksB[task] || { success: 0, total: 0, rate: 0 };
+    const diff = b.rate - a.rate;
+    const pval = bootstrapTest(a, b, 1000);
+    const sig = pval < 0.05;
+    const winner = sig ? (diff > 0 ? 'B' : 'A') : 'tie';
+    if(winner === 'A') overallA.wins++;
+    if(winner === 'B') overallB.wins++;
+    return { task, a, b, diff, pval, sig, winner };
+  });
+  
+  const ties = taskResults.filter(t => t.winner === 'tie').length;
+  
+  // Verdict
+  const overallDiff = overallB.rate - overallA.rate;
+  const overallPval = bootstrapTestRaw(dataA.map(d => d.success ? 1 : 0), dataB.map(d => d.success ? 1 : 0), 2000);
+  let verdictClass, verdictText, verdictSub;
+  if(overallPval < 0.05) {
+    if(overallDiff > 0) {
+      verdictClass = 'verdict-b'; verdictText = `🏆 ${nameB} is significantly better`;
+      verdictSub = `${(overallDiff*100).toFixed(1)} percentage points higher success rate (p=${overallPval.toFixed(3)})`;
+    } else {
+      verdictClass = 'verdict-a'; verdictText = `🏆 ${nameA} is significantly better`;
+      verdictSub = `${(Math.abs(overallDiff)*100).toFixed(1)} percentage points higher success rate (p=${overallPval.toFixed(3)})`;
+    }
+  } else {
+    verdictClass = 'verdict-tie'; verdictText = '🤝 No significant difference';
+    verdictSub = `Difference of ${(Math.abs(overallDiff)*100).toFixed(1)}pp is not statistically significant (p=${overallPval.toFixed(3)})`;
+  }
+  
+  document.getElementById('verdictBanner').innerHTML = `<div class="verdict-banner ${verdictClass}"><h2>${verdictText}</h2><p>${verdictSub}</p></div>`;
+  
+  // Stats
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-value" style="color:var(--policyA)">${(overallA.rate*100).toFixed(1)}%</div><div class="stat-label">${nameA} Success</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--policyB)">${(overallB.rate*100).toFixed(1)}%</div><div class="stat-label">${nameB} Success</div></div>
+    <div class="stat-card"><div class="stat-value">${overallA.wins}-${overallB.wins}-${ties}</div><div class="stat-label">W-L-T (tasks)</div></div>
+    <div class="stat-card"><div class="stat-value">${overallA.total + overallB.total}</div><div class="stat-label">Total Trials</div></div>
+    <div class="stat-card"><div class="stat-value">${overallPval < 0.001 ? '<0.001' : overallPval.toFixed(3)}</div><div class="stat-label">Overall p-value</div></div>
+  `;
+  
+  // Charts
+  document.getElementById('chartsGrid').innerHTML = `
+    <div class="chart-panel"><div class="chart-title">Success Rate Comparison</div><div class="chart-container"><canvas id="chartCompare"></canvas></div></div>
+    <div class="chart-panel"><div class="chart-title">Win/Loss/Tie by Task</div><div class="chart-container"><canvas id="chartWLT"></canvas></div></div>
+    <div class="chart-panel full"><div class="chart-title">Confidence Intervals (95% Bootstrap)</div><div class="chart-container" style="height:200px"><canvas id="chartCI"></canvas></div></div>
+  `;
+  
+  // Comparison bar chart
+  charts.compare = new Chart(document.getElementById('chartCompare'), {
+    type: 'bar',
+    data: {
+      labels: allTasks.map(t => t.replace(/_/g,' ')),
+      datasets: [
+        { label: nameA, data: taskResults.map(t => t.a.rate * 100), backgroundColor: 'rgba(41,151,255,.6)', borderColor: '#2997ff', borderWidth: 1, borderRadius: 4 },
+        { label: nameB, data: taskResults.map(t => t.b.rate * 100), backgroundColor: 'rgba(191,90,242,.6)', borderColor: '#bf5af2', borderWidth: 1, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { maxRotation: 45, font: { size: 9 } } },
+        y: { min: 0, max: 100, title: { display: true, text: 'Success %' } }
+      }
+    }
+  });
+  
+  // W/L/T chart
+  charts.wlt = new Chart(document.getElementById('chartWLT'), {
+    type: 'doughnut',
+    data: {
+      labels: [`${nameA} Wins`, `${nameB} Wins`, 'Tie'],
+      datasets: [{ data: [overallA.wins, overallB.wins, ties], backgroundColor: ['#2997ff','#bf5af2','#ffd60a'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, padding: 12 } } },
+      cutout: '50%'
+    }
+  });
+  
+  // CI chart
+  const ciData = taskResults.map(t => {
+    const ci = bootstrapCI(t.a, t.b, 1000);
+    return { task: t.task, lower: ci.lower * 100, upper: ci.upper * 100, mean: t.diff * 100 };
+  });
+  
+  charts.ci = new Chart(document.getElementById('chartCI'), {
+    type: 'bar',
+    data: {
+      labels: ciData.map(d => d.task.replace(/_/g,' ')),
+      datasets: [{
+        label: 'Difference (B - A)',
+        data: ciData.map(d => d.mean),
+        backgroundColor: ciData.map(d => d.mean > 0 ? 'rgba(191,90,242,.5)' : 'rgba(41,151,255,.5)'),
+        borderColor: ciData.map(d => d.mean > 0 ? '#bf5af2' : '#2997ff'),
+        borderWidth: 1, borderRadius: 4,
+        error: ciData.map(d => [d.mean - d.lower, d.upper - d.mean])
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { display: false },
+        annotation: { annotations: { zeroLine: { type: 'line', xMin: 0, xMax: 0, borderColor: '#fff', borderWidth: 1, borderDash: [4,4] } } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Percentage points (B − A)' } },
+        y: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+  
+  // Table
+  document.getElementById('taskTableBody').innerHTML = taskResults.map(t => {
+    const winClass = t.winner === 'A' ? 'winner-a' : t.winner === 'B' ? 'winner-b' : 'winner-tie';
+    const winText = t.winner === 'A' ? nameA : t.winner === 'B' ? nameB : 'No sig. diff.';
+    return `<tr>
+      <td><strong>${t.task.replace(/_/g,' ')}</strong></td>
+      <td style="color:var(--policyA)">${(t.a.rate*100).toFixed(1)}% <span style="color:var(--dim);font-size:.7rem">(${t.a.success}/${t.a.total})</span></td>
+      <td style="color:var(--policyB)">${(t.b.rate*100).toFixed(1)}% <span style="color:var(--dim);font-size:.7rem">(${t.b.success}/${t.b.total})</span></td>
+      <td>${t.diff > 0 ? '+' : ''}${(t.diff*100).toFixed(1)}pp</td>
+      <td>${t.pval < 0.001 ? '<0.001' : t.pval.toFixed(3)}${t.sig ? ' ✓' : ''}</td>
+      <td class="${winClass}">${winText}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ═══ Statistics ═══ */
+function groupByTask(data) {
+  const groups = {};
+  data.forEach(d => {
+    if(!groups[d.task]) groups[d.task] = { success: 0, total: 0 };
+    groups[d.task].total++;
+    if(d.success) groups[d.task].success++;
+  });
+  for(const k in groups) groups[k].rate = groups[k].success / groups[k].total;
+  return groups;
+}
+
+function bootstrapTest(a, b, n) {
+  if(!a.total || !b.total) return 1;
+  const observed = b.rate - a.rate;
+  // Pool data
+  const poolRate = (a.success + b.success) / (a.total + b.total);
+  let count = 0;
+  for(let i = 0; i < n; i++) {
+    let sa = 0, sb = 0;
+    for(let j = 0; j < a.total; j++) if(Math.random() < poolRate) sa++;
+    for(let j = 0; j < b.total; j++) if(Math.random() < poolRate) sb++;
+    const diff = sb/b.total - sa/a.total;
+    if(Math.abs(diff) >= Math.abs(observed)) count++;
+  }
+  return count / n;
+}
+
+function bootstrapTestRaw(arrA, arrB, n) {
+  const meanA = arrA.reduce((s,v)=>s+v,0)/arrA.length;
+  const meanB = arrB.reduce((s,v)=>s+v,0)/arrB.length;
+  const observed = meanB - meanA;
+  const pooled = [...arrA, ...arrB];
+  let count = 0;
+  for(let i = 0; i < n; i++) {
+    const sa = sampleMean(pooled, arrA.length);
+    const sb = sampleMean(pooled, arrB.length);
+    if(Math.abs(sb - sa) >= Math.abs(observed)) count++;
+  }
+  return count / n;
+}
+
+function bootstrapCI(a, b, n) {
+  const diffs = [];
+  for(let i = 0; i < n; i++) {
+    const sa = a.total ? binomSample(a.total, a.rate) / a.total : 0;
+    const sb = b.total ? binomSample(b.total, b.rate) / b.total : 0;
+    diffs.push(sb - sa);
+  }
+  diffs.sort((a,b) => a - b);
+  return { lower: diffs[Math.floor(n * 0.025)], upper: diffs[Math.floor(n * 0.975)] };
+}
+
+function sampleMean(arr, n) {
+  let s = 0;
+  for(let i = 0; i < n; i++) s += arr[Math.floor(Math.random() * arr.length)];
+  return s / n;
+}
+
+function binomSample(n, p) {
+  let s = 0;
+  for(let i = 0; i < n; i++) if(Math.random() < p) s++;
+  return s;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synphony — Robot Intelligence Demo Showcase</title>
+<style>
+/* ═══ Reset & Base ═══ */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0a;--fg:#f5f5f7;--dim:#86868b;--accent:#2997ff;
+  --accent2:#bf5af2;--accent3:#30d158;--accent4:#ff6b6b;
+  --glass:rgba(255,255,255,.06);--glass-border:rgba(255,255,255,.1);
+  --section-gap:140px;--ease:cubic-bezier(.25,.46,.45,.94);
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;overflow-x:hidden;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+img,video{max-width:100%;display:block}
+
+/* ═══ Scroll-triggered animations ═══ */
+.reveal{opacity:0;transform:translateY(60px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-left{opacity:0;transform:translateX(-80px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal-left.visible{opacity:1;transform:translateX(0)}
+.reveal-right{opacity:0;transform:translateX(80px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal-right.visible{opacity:1;transform:translateX(0)}
+.reveal-scale{opacity:0;transform:scale(.85);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal-scale.visible{opacity:1;transform:scale(1)}
+.stagger>*{opacity:0;transform:translateY(40px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.stagger.visible>*{opacity:1;transform:translateY(0)}
+.stagger.visible>*:nth-child(1){transition-delay:.05s}
+.stagger.visible>*:nth-child(2){transition-delay:.15s}
+.stagger.visible>*:nth-child(3){transition-delay:.25s}
+.stagger.visible>*:nth-child(4){transition-delay:.35s}
+.stagger.visible>*:nth-child(5){transition-delay:.45s}
+.stagger.visible>*:nth-child(6){transition-delay:.55s}
+
+/* ═══ Navigation ═══ */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:56px;display:flex;align-items:center;justify-content:space-between;backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);background:rgba(10,10,10,.72);border-bottom:1px solid rgba(255,255,255,.08);transition:background .3s}
+nav .logo{font-size:1.15rem;font-weight:700;letter-spacing:-.02em;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+nav .nav-links{display:flex;gap:28px;font-size:.85rem;color:var(--dim)}
+nav .nav-links a{color:var(--dim);transition:color .2s}
+nav .nav-links a:hover{color:var(--fg);text-decoration:none}
+
+/* ═══ Hero ═══ */
+.hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 24px 80px;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(41,151,255,.12),transparent 70%),radial-gradient(ellipse 60% 40% at 30% 60%,rgba(191,90,242,.08),transparent 60%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;background:var(--glass);border:1px solid var(--glass-border);font-size:.8rem;color:var(--accent);margin-bottom:28px;backdrop-filter:blur(10px)}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--accent3);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-size:clamp(3rem,8vw,6rem);font-weight:700;letter-spacing:-.04em;line-height:1.05;max-width:900px;background:linear-gradient(180deg,#fff 30%,rgba(255,255,255,.5));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero .subtitle{font-size:clamp(1.1rem,2.5vw,1.5rem);color:var(--dim);max-width:600px;margin:24px auto 0;line-height:1.5;font-weight:400}
+.hero .cta-row{display:flex;gap:16px;margin-top:40px;flex-wrap:wrap;justify-content:center}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;border-radius:100px;font-size:.95rem;font-weight:500;cursor:pointer;transition:all .25s var(--ease);border:none;text-decoration:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#1a8aef;transform:translateY(-2px);box-shadow:0 8px 30px rgba(41,151,255,.3);text-decoration:none}
+.btn-ghost{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.25)}
+.btn-ghost:hover{border-color:rgba(255,255,255,.5);transform:translateY(-2px);text-decoration:none}
+.scroll-indicator{position:absolute;bottom:32px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--dim);font-size:.75rem;animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+.scroll-indicator svg{width:20px;height:20px;stroke:var(--dim);fill:none;stroke-width:2}
+
+/* ═══ Section Containers ═══ */
+section{padding:var(--section-gap) 48px;max-width:1200px;margin:0 auto}
+.section-label{font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:var(--accent);margin-bottom:12px}
+.section-title{font-size:clamp(2rem,4.5vw,3.5rem);font-weight:700;letter-spacing:-.03em;line-height:1.1;max-width:800px}
+.section-desc{font-size:1.1rem;color:var(--dim);max-width:600px;margin-top:16px;line-height:1.7}
+.section-title .gradient-text{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ═══ Stats Bar ═══ */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding:80px 48px;max-width:1200px;margin:0 auto}
+.stat-card{text-align:center;padding:40px 20px;border-radius:20px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(10px)}
+.stat-number{font-size:clamp(2.5rem,5vw,3.5rem);font-weight:700;letter-spacing:-.03em;line-height:1}
+.stat-number.blue{color:var(--accent)}
+.stat-number.purple{color:var(--accent2)}
+.stat-number.green{color:var(--accent3)}
+.stat-number.red{color:var(--accent4)}
+.stat-label{font-size:.85rem;color:var(--dim);margin-top:8px;font-weight:500}
+
+/* ═══ Demo Cards ═══ */
+.demos-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;margin-top:48px}
+.demo-card{position:relative;border-radius:20px;overflow:hidden;background:#111;border:1px solid var(--glass-border);transition:transform .4s var(--ease),box-shadow .4s var(--ease);cursor:pointer}
+.demo-card:hover{transform:translateY(-6px) scale(1.01);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.demo-card .card-video{width:100%;aspect-ratio:16/9;object-fit:cover;background:#1a1a1a}
+.demo-card .card-body{padding:24px}
+.demo-card .card-tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.tag-gen{background:rgba(41,151,255,.15);color:var(--accent)}
+.tag-eval{background:rgba(48,209,88,.15);color:var(--accent3)}
+.tag-tool{background:rgba(191,90,242,.15);color:var(--accent2)}
+.tag-sim{background:rgba(255,107,107,.15);color:var(--accent4)}
+.demo-card h3{font-size:1.2rem;font-weight:600;margin-bottom:6px}
+.demo-card p{font-size:.85rem;color:var(--dim);line-height:1.5}
+.demo-card .card-footer{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-top:1px solid rgba(255,255,255,.06)}
+.demo-card .card-footer span{font-size:.75rem;color:var(--dim)}
+.demo-card .card-arrow{width:28px;height:28px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;transition:transform .3s,background .3s}
+.demo-card:hover .card-arrow{transform:translateX(4px);background:var(--accent)}
+
+/* ═══ Feature Showcase (alternating) ═══ */
+.feature-row{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;margin-top:var(--section-gap)}
+.feature-row.reverse{direction:rtl}
+.feature-row.reverse>*{direction:ltr}
+.feature-visual{position:relative;border-radius:20px;overflow:hidden;background:#111;border:1px solid var(--glass-border);aspect-ratio:4/3}
+.feature-visual .glow{position:absolute;inset:-50%;background:radial-gradient(circle at center,rgba(41,151,255,.1),transparent 60%);pointer-events:none;animation:glowPulse 4s ease-in-out infinite alternate}
+@keyframes glowPulse{0%{opacity:.5}100%{opacity:1}}
+.feature-visual canvas{width:100%;height:100%}
+.feature-text{max-width:500px}
+.feature-text h3{font-size:1.8rem;font-weight:700;margin-bottom:16px;letter-spacing:-.02em}
+.feature-text p{color:var(--dim);line-height:1.7;margin-bottom:20px}
+.feature-pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{padding:6px 14px;border-radius:100px;background:var(--glass);border:1px solid var(--glass-border);font-size:.78rem;color:var(--dim);font-weight:500}
+
+/* ═══ Timeline ═══ */
+.timeline{position:relative;padding:60px 0;margin-top:48px}
+.timeline::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,transparent,var(--glass-border) 10%,var(--glass-border) 90%,transparent);transform:translateX(-50%)}
+.tl-item{display:flex;align-items:center;margin-bottom:48px;position:relative}
+.tl-item:nth-child(odd){flex-direction:row;padding-right:calc(50% + 40px)}
+.tl-item:nth-child(even){flex-direction:row-reverse;padding-left:calc(50% + 40px)}
+.tl-dot{position:absolute;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:var(--accent);border:3px solid var(--bg);z-index:2;box-shadow:0 0 20px rgba(41,151,255,.4)}
+.tl-content{padding:24px;border-radius:16px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(10px);max-width:400px;width:100%}
+.tl-date{font-size:.75rem;color:var(--accent);font-weight:600;margin-bottom:6px}
+.tl-content h4{font-size:1rem;font-weight:600;margin-bottom:4px}
+.tl-content p{font-size:.82rem;color:var(--dim);line-height:1.5}
+
+/* ═══ Tech Stack ═══ */
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:48px}
+.tech-item{padding:28px 20px;border-radius:16px;background:var(--glass);border:1px solid var(--glass-border);text-align:center;transition:transform .3s,border-color .3s}
+.tech-item:hover{transform:translateY(-4px);border-color:var(--accent)}
+.tech-icon{font-size:2.2rem;margin-bottom:12px}
+.tech-item h4{font-size:.9rem;font-weight:600;margin-bottom:4px}
+.tech-item p{font-size:.75rem;color:var(--dim)}
+
+/* ═══ CTA Section ═══ */
+.cta-section{text-align:center;padding:var(--section-gap) 48px;position:relative}
+.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 100%,rgba(41,151,255,.08),transparent 70%);pointer-events:none}
+.cta-section h2{font-size:clamp(2.5rem,5vw,4rem);font-weight:700;letter-spacing:-.03em;margin-bottom:16px}
+.cta-section p{color:var(--dim);font-size:1.1rem;max-width:500px;margin:0 auto 36px}
+
+/* ═══ Footer ═══ */
+footer{padding:40px 48px;border-top:1px solid rgba(255,255,255,.06);text-align:center;color:var(--dim);font-size:.8rem}
+
+/* ═══ Particle Canvas ═══ */
+#particles{position:fixed;inset:0;z-index:-1;pointer-events:none}
+
+/* ═══ Responsive ═══ */
+@media(max-width:768px){
+  nav{padding:0 20px}
+  nav .nav-links{display:none}
+  section,.stats-bar,.cta-section{padding-left:20px;padding-right:20px}
+  .stats-bar{grid-template-columns:repeat(2,1fr);gap:12px}
+  .feature-row,.feature-row.reverse{grid-template-columns:1fr;direction:ltr}
+  .tl-item:nth-child(odd),.tl-item:nth-child(even){padding:0 0 0 40px;flex-direction:row}
+  .timeline::before{left:10px}
+  .tl-dot{left:10px}
+  .demos-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Particle Background -->
+<canvas id="particles"></canvas>
+
+<!-- Navigation -->
+<nav>
+  <div class="logo">⚡ Synphony Robotics</div>
+  <div class="nav-links">
+    <a href="#demos">Demos</a>
+    <a href="#capabilities">Capabilities</a>
+    <a href="#timeline">Roadmap</a>
+    <a href="#tech">Stack</a>
+    <a href="#contact">Contact</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge reveal"><span class="dot"></span> Building Robot Intelligence</div>
+  <h1 class="reveal">The Future of<br>Robot Manipulation</h1>
+  <p class="subtitle reveal">Synphony is building intelligent robots that see, understand, and act. From synthetic data generation to real-world deployment — end-to-end robot learning.</p>
+  <div class="cta-row reveal">
+    <a href="#demos" class="btn btn-primary">Explore Demos ↓</a>
+    <a href="#capabilities" class="btn btn-ghost">Our Approach</a>
+  </div>
+  <div class="scroll-indicator">
+    <span>Scroll to explore</span>
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+  </div>
+</section>
+
+<!-- Stats -->
+<div class="stats-bar stagger">
+  <div class="stat-card">
+    <div class="stat-number blue" data-target="24">0</div>
+    <div class="stat-label">Research Experiments</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number purple" data-target="12000">0</div>
+    <div class="stat-label">Lines of Code</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number green" data-target="6">0</div>
+    <div class="stat-label">Robot Tasks Mastered</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number red" data-target="100">0</div>
+    <div class="stat-label">Success Rate %</div>
+  </div>
+</div>
+
+<!-- Demos Section -->
+<section id="demos">
+  <div class="reveal">
+    <div class="section-label">Demo Gallery</div>
+    <div class="section-title">See Our Robots <span class="gradient-text">In Action</span></div>
+    <div class="section-desc">From video generation to real-time evaluation — every tool we build pushes the boundary of what robots can learn.</div>
+  </div>
+  <div class="demos-grid stagger">
+    <!-- Card 1 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#1a1a3e,#0d1b2a);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="35" fill="none" stroke="#2997ff" stroke-width="2" opacity=".3"/><polygon points="34,26 34,54 58,40" fill="#2997ff"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-gen">Generation</span>
+        <h3>Cosmos Transfer 2.5</h3>
+        <p>Synthetic video generation for robot manipulation tasks. Real-to-sim transfer at scale with photorealistic output quality.</p>
+      </div>
+      <div class="card-footer">
+        <span>Video Generation · Sim-to-Real</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+    <!-- Card 2 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#1a2e1a,#0d2a15);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><rect x="15" y="20" width="50" height="40" rx="4" fill="none" stroke="#30d158" stroke-width="2" opacity=".3"/><circle cx="40" cy="40" r="8" fill="#30d158" opacity=".5"/><circle cx="40" cy="40" r="3" fill="#30d158"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-eval">Evaluation</span>
+        <h3>SwagScore Evaluator</h3>
+        <p>5-dimensional video quality evaluation with collaborative multi-evaluator sessions and real-time dashboards.</p>
+      </div>
+      <div class="card-footer">
+        <span>Quality Metrics · Multi-evaluator</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+    <!-- Card 3 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#2e1a2e,#2a0d2a);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><path d="M20 55 L35 35 L45 45 L60 20" fill="none" stroke="#bf5af2" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="55" r="3" fill="#bf5af2"/><circle cx="35" cy="35" r="3" fill="#bf5af2"/><circle cx="45" cy="45" r="3" fill="#bf5af2"/><circle cx="60" cy="20" r="3" fill="#bf5af2"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-tool">Analytics</span>
+        <h3>Policy Leaderboard</h3>
+        <p>Compare robot policies head-to-head with radar charts, sparklines, and statistical significance testing.</p>
+      </div>
+      <div class="card-footer">
+        <span>Policy Comparison · Rankings</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+    <!-- Card 4 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#2e2a1a,#2a1a0d);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><rect x="25" y="30" width="12" height="25" rx="2" fill="none" stroke="#ff6b6b" stroke-width="2"/><rect x="43" y="30" width="12" height="25" rx="2" fill="none" stroke="#ff6b6b" stroke-width="2"/><path d="M31 30 L31 22 L49 22 L49 30" fill="none" stroke="#ff6b6b" stroke-width="2"/><circle cx="40" cy="62" r="5" fill="none" stroke="#ff6b6b" stroke-width="1.5" opacity=".5"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-sim">Hardware</span>
+        <h3>Gripper Control System</h3>
+        <p>Dynamixel-powered parallel gripper with camera-in-hand. 0.0–0.5 rad range, force-aware grasping.</p>
+      </div>
+      <div class="card-footer">
+        <span>Gripper · Dynamixel · Camera</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+    <!-- Card 5 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#1a2a2e,#0d1a2a);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><rect x="10" y="15" width="60" height="50" rx="6" fill="none" stroke="#2997ff" stroke-width="2" opacity=".3"/><line x1="10" y1="30" x2="70" y2="30" stroke="#2997ff" stroke-width="1" opacity=".2"/><rect x="16" y="36" width="22" height="12" rx="3" fill="#2997ff" opacity=".15"/><rect x="42" y="36" width="22" height="12" rx="3" fill="#30d158" opacity=".15"/><rect x="16" y="52" width="48" height="6" rx="3" fill="#bf5af2" opacity=".1"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-tool">Dashboard</span>
+        <h3>SwagBot Command Center</h3>
+        <p>Unified portal connecting all 24 experiments. One-click access to every tool in the SwagBot ecosystem.</p>
+      </div>
+      <div class="card-footer">
+        <span>Meta-portal · All Tools</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+    <!-- Card 6 -->
+    <div class="demo-card">
+      <div class="card-video" style="background:linear-gradient(135deg,#1a1a1a,#111);display:flex;align-items:center;justify-content:center">
+        <svg width="80" height="80" viewBox="0 0 80 80"><rect x="12" y="20" width="56" height="40" rx="3" fill="none" stroke="#fff" stroke-width="1.5" opacity=".2"/><path d="M20 50 L30 38 L40 44 L55 28" fill="none" stroke="#30d158" stroke-width="2"/><path d="M20 52 L35 45 L50 48 L60 40" fill="none" stroke="#ff6b6b" stroke-width="1.5" opacity=".6" stroke-dasharray="4 2"/></svg>
+      </div>
+      <div class="card-body">
+        <span class="card-tag tag-eval">Training</span>
+        <h3>Augmentation Pipeline</h3>
+        <p>N×M augmentation matrix with pixel-diff overlay, PSNR scoring, and batch quality analysis across video pairs.</p>
+      </div>
+      <div class="card-footer">
+        <span>Data Aug · Quality Scoring</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Capabilities -->
+<section id="capabilities">
+  <!-- Feature 1 -->
+  <div class="feature-row reveal-left">
+    <div class="feature-visual" id="viz-gen">
+      <div class="glow"></div>
+      <canvas id="canvas-gen"></canvas>
+    </div>
+    <div class="feature-text reveal-right">
+      <div class="section-label">Synthetic Data</div>
+      <h3>Generate Infinite Training Data</h3>
+      <p>Using Cosmos Transfer 2.5, we generate photorealistic synthetic videos of robot manipulation tasks. One real demonstration becomes thousands of training samples with varied lighting, textures, and viewpoints.</p>
+      <div class="feature-pills">
+        <span class="pill">Cosmos 2.5</span>
+        <span class="pill">Real-to-Sim</span>
+        <span class="pill">Prompt Design</span>
+        <span class="pill">Quality Scoring</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature 2 -->
+  <div class="feature-row reverse reveal-right">
+    <div class="feature-visual" id="viz-eval">
+      <div class="glow" style="background:radial-gradient(circle at center,rgba(48,209,88,.1),transparent 60%)"></div>
+      <canvas id="canvas-eval"></canvas>
+    </div>
+    <div class="feature-text reveal-left">
+      <div class="section-label" style="color:var(--accent3)">Evaluation</div>
+      <h3>Measure Everything, Ship What Works</h3>
+      <p>Our evaluation suite goes beyond simple metrics. Multi-evaluator sessions with real-time sync, emoji-based triage for rapid screening, and statistical policy comparison with confidence intervals.</p>
+      <div class="feature-pills">
+        <span class="pill">SwagScore</span>
+        <span class="pill">VibeCheck</span>
+        <span class="pill">A/B Testing</span>
+        <span class="pill">Policy Ranking</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature 3 -->
+  <div class="feature-row reveal-left">
+    <div class="feature-visual" id="viz-hw">
+      <div class="glow" style="background:radial-gradient(circle at center,rgba(191,90,242,.1),transparent 60%)"></div>
+      <canvas id="canvas-hw"></canvas>
+    </div>
+    <div class="feature-text reveal-right">
+      <div class="section-label" style="color:var(--accent2)">Hardware</div>
+      <h3>From Simulation to Real Metal</h3>
+      <p>Our robots run on WidowX arms with Dynamixel-driven parallel grippers and camera-in-hand setups. Trajectory data is logged, visualized, and replayed through our timeline tools for debugging and analysis.</p>
+      <div class="feature-pills">
+        <span class="pill">WidowX 250s</span>
+        <span class="pill">Dynamixel</span>
+        <span class="pill">Camera-in-Hand</span>
+        <span class="pill">ROS2</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Timeline -->
+<section id="timeline">
+  <div class="reveal" style="text-align:center;margin-bottom:40px">
+    <div class="section-label">Development Timeline</div>
+    <div class="section-title" style="margin:0 auto">Built at <span class="gradient-text">Startup Speed</span></div>
+    <div class="section-desc" style="margin:16px auto 0">24 experiments shipped. All working. All in one sprint.</div>
+  </div>
+  <div class="timeline">
+    <div class="tl-item reveal-left">
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <div class="tl-date">Phase 1 — Foundation</div>
+        <h4>Core Evaluation Tools</h4>
+        <p>SwagScore, VibeCheck, EvalSession — the building blocks for measuring robot video quality at scale.</p>
+      </div>
+    </div>
+    <div class="tl-item reveal-right">
+      <div class="tl-dot" style="background:var(--accent2)"></div>
+      <div class="tl-content">
+        <div class="tl-date" style="color:var(--accent2)">Phase 2 — Data Pipeline</div>
+        <h4>Augmentation & Analysis</h4>
+        <p>DataAugGallery, AugmentationMatrix, BatchDiff — systematic approaches to growing and validating training data.</p>
+      </div>
+    </div>
+    <div class="tl-item reveal-left">
+      <div class="tl-dot" style="background:var(--accent3)"></div>
+      <div class="tl-content">
+        <div class="tl-date" style="color:var(--accent3)">Phase 3 — Infrastructure</div>
+        <h4>Config & Deployment</h4>
+        <p>CosmosConfigBuilder, RobotOpsPlaybook, SwagBot Dashboard — making the pipeline reproducible and accessible.</p>
+      </div>
+    </div>
+    <div class="tl-item reveal-right">
+      <div class="tl-dot" style="background:var(--accent4)"></div>
+      <div class="tl-content">
+        <div class="tl-date" style="color:var(--accent4)">Phase 4 — Advanced Tools</div>
+        <h4>Next Generation</h4>
+        <p>Annotation studio, training monitor, failure analysis — closing the loop on the robot learning pipeline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Tech Stack -->
+<section id="tech">
+  <div class="reveal" style="text-align:center;margin-bottom:20px">
+    <div class="section-label">Technology</div>
+    <div class="section-title" style="margin:0 auto">Built With <span class="gradient-text">Modern Tools</span></div>
+  </div>
+  <div class="tech-grid stagger">
+    <div class="tech-item">
+      <div class="tech-icon">🤖</div>
+      <h4>NVIDIA Cosmos</h4>
+      <p>World foundation model for video generation</p>
+    </div>
+    <div class="tech-item">
+      <div class="tech-icon">🦾</div>
+      <h4>WidowX 250s</h4>
+      <p>6-DOF robot arm platform</p>
+    </div>
+    <div class="tech-item">
+      <div class="tech-icon">🧠</div>
+      <h4>LeRobot</h4>
+      <p>Hugging Face robot learning library</p>
+    </div>
+    <div class="tech-item">
+      <div class="tech-icon">📊</div>
+      <h4>Chart.js</h4>
+      <p>Real-time data visualization</p>
+    </div>
+    <div class="tech-item">
+      <div class="tech-icon">🎯</div>
+      <h4>Canvas API</h4>
+      <p>Pixel-level video analysis</p>
+    </div>
+    <div class="tech-item">
+      <div class="tech-icon">⚡</div>
+      <h4>Pure JS</h4>
+      <p>Zero dependencies, instant load</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="contact">
+  <h2 class="reveal">Ready to Build<br>the Future?</h2>
+  <p class="reveal">We're pushing the boundaries of robot intelligence. Every tool on this page was built in a single sprint.</p>
+  <div class="reveal">
+    <a href="https://github.com/gordowuu/swagbot-workspace" class="btn btn-primary" target="_blank">View on GitHub →</a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>© 2026 Synphony Robotics · Built with ⚡ by SwagBot · 24 experiments and counting</p>
+</footer>
+
+<script>
+/* ═══ Particle Background ═══ */
+(function(){
+  const c=document.getElementById('particles'),x=c.getContext('2d');
+  let w,h,pts=[];
+  function resize(){w=c.width=innerWidth;h=c.height=innerHeight;pts=[];for(let i=0;i<60;i++)pts.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.5+.5})}
+  resize();window.addEventListener('resize',resize);
+  function draw(){
+    x.clearRect(0,0,w,h);
+    for(const p of pts){
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=w;if(p.x>w)p.x=0;if(p.y<0)p.y=h;if(p.y>h)p.y=0;
+      x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle='rgba(255,255,255,.12)';x.fill();
+    }
+    // Connect nearby
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<150){x.beginPath();x.moveTo(pts[i].x,pts[i].y);x.lineTo(pts[j].x,pts[j].y);x.strokeStyle=`rgba(41,151,255,${.06*(1-d/150)})`;x.stroke()}
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ═══ Scroll Reveal ═══ */
+const io=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');io.unobserve(e.target)}});
+},{threshold:.15,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.reveal,.reveal-left,.reveal-right,.reveal-scale,.stagger').forEach(el=>io.observe(el));
+
+/* ═══ Counter Animation ═══ */
+const cio=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(!e.isIntersecting)return;
+    e.target.querySelectorAll('.stat-number').forEach(n=>{
+      const target=+n.dataset.target,dur=1500,start=performance.now();
+      function tick(now){
+        const p=Math.min((now-start)/dur,1),ease=1-Math.pow(1-p,3);
+        n.textContent=target>=1000?Math.round(target*ease).toLocaleString():Math.round(target*ease);
+        if(target===100&&p>=1)n.textContent='100%';
+        if(p<1)requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+    cio.unobserve(e.target);
+  });
+},{threshold:.3});
+document.querySelectorAll('.stats-bar').forEach(el=>cio.observe(el));
+
+/* ═══ Feature Canvas Animations ═══ */
+function initCanvasAnim(id,drawFn){
+  const cv=document.getElementById(id);if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const obs=new IntersectionObserver(([e])=>{
+    if(e.isIntersecting){(function loop(){cv._raf=requestAnimationFrame(()=>{
+      cv.width=cv.clientWidth*devicePixelRatio;cv.height=cv.clientHeight*devicePixelRatio;
+      ctx.scale(devicePixelRatio,devicePixelRatio);
+      drawFn(ctx,cv.clientWidth,cv.clientHeight,performance.now());
+      loop();
+    })})()}else cancelAnimationFrame(cv._raf);
+  },{threshold:.1});
+  obs.observe(cv.parentElement);
+}
+
+// Data gen viz - flowing particles
+initCanvasAnim('canvas-gen',(ctx,w,h,t)=>{
+  ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,w,h);
+  for(let i=0;i<40;i++){
+    const x=((t*.02+i*37)%w),y=h/2+Math.sin(t*.002+i)*h*.3;
+    const r=3+Math.sin(t*.003+i*2)*2;
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${210+i*3},80%,60%,.${3+Math.floor(Math.sin(t*.002+i)*3)})`;ctx.fill();
+  }
+  // Flow lines
+  ctx.strokeStyle='rgba(41,151,255,.1)';ctx.lineWidth=1;
+  for(let l=0;l<5;l++){
+    ctx.beginPath();
+    for(let x=0;x<w;x+=4){
+      const y=h*.2+l*(h*.15)+Math.sin(x*.01+t*.001+l)*20;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+});
+
+// Eval viz - bar chart animation
+initCanvasAnim('canvas-eval',(ctx,w,h,t)=>{
+  ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,w,h);
+  const bars=[.85,.72,.91,.67,.88,.95,.78,.83];
+  const bw=w/(bars.length*2+1),gap=bw;
+  bars.forEach((v,i)=>{
+    const bh=v*h*.6*(0.8+0.2*Math.sin(t*.002+i));
+    const x=gap+i*(bw+gap);
+    const y=h-40-bh;
+    const g=ctx.createLinearGradient(x,y,x,y+bh);
+    g.addColorStop(0,'#30d158');g.addColorStop(1,'rgba(48,209,88,.2)');
+    ctx.fillStyle=g;
+    ctx.beginPath();ctx.roundRect(x,y,bw,bh,4);ctx.fill();
+  });
+  // Axis
+  ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(gap-4,h-40);ctx.lineTo(w-gap+4,h-40);ctx.stroke();
+});
+
+// Hardware viz - robotic arm wireframe
+initCanvasAnim('canvas-hw',(ctx,w,h,t)=>{
+  ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,w,h);
+  const cx=w/2,cy=h*.7;
+  const a1=Math.sin(t*.001)*0.4-0.8;
+  const a2=Math.sin(t*.0015+1)*0.5+0.3;
+  const l1=h*.3,l2=h*.25;
+  // Base
+  ctx.fillStyle='rgba(191,90,242,.15)';
+  ctx.fillRect(cx-30,cy,60,10);
+  // Segment 1
+  const x1=cx+Math.cos(a1)*l1,y1=cy+Math.sin(a1)*l1;
+  ctx.strokeStyle='rgba(191,90,242,.6)';ctx.lineWidth=4;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x1,y1);ctx.stroke();
+  // Joint
+  ctx.beginPath();ctx.arc(x1,y1,6,0,Math.PI*2);ctx.fillStyle='rgba(191,90,242,.3)';ctx.fill();ctx.strokeStyle='#bf5af2';ctx.lineWidth=2;ctx.stroke();
+  // Segment 2
+  const x2=x1+Math.cos(a1+a2)*l2,y2=y1+Math.sin(a1+a2)*l2;
+  ctx.strokeStyle='rgba(191,90,242,.4)';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  // Gripper
+  const ga=a1+a2,gw=12+Math.sin(t*.003)*6;
+  ctx.strokeStyle='#bf5af2';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x2-Math.cos(ga+1.57)*gw,y2-Math.sin(ga+1.57)*gw);ctx.lineTo(x2,y2);ctx.lineTo(x2+Math.cos(ga+1.57)*gw,y2+Math.sin(ga+1.57)*gw);ctx.stroke();
+  // Base joint
+  ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.fillStyle='rgba(191,90,242,.2)';ctx.fill();ctx.strokeStyle='#bf5af2';ctx.lineWidth=2;ctx.stroke();
+});
+
+/* ═══ Smooth scroll for nav links ═══ */
+document.querySelectorAll('nav a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{e.preventDefault();document.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'start'})});
+});
+</script>
+</body>
+</html>

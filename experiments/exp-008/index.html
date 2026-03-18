@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PolicyLeaderboard — Robot Policy Eval Rankings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #07070f;
+      --surf:   #0d0d1a;
+      --surf2:  #12121e;
+      --surf3:  #181828;
+      --border: #1a1a2e;
+      --brd2:   #22223a;
+      --text:   #e2e2f0;
+      --muted:  #525270;
+      --dim:    #303050;
+      --gold:   #f59e0b;
+      --silver: #94a3b8;
+      --bronze: #c07040;
+      --accent: #7c6cfc;
+      --acc2:   #5a4de0;
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --cyan:   #22d3ee;
+      --r:      10px;
+    }
+
+    html, body { min-height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(7,7,15,0.97);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 40;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+    .logo span { color: var(--accent); }
+    .header-meta { font-size: 12px; color: var(--muted); }
+    .header-spacer { flex: 1; }
+    .last-updated { font-size: 11px; color: var(--muted); padding: 3px 9px; background: var(--surf2); border: 1px solid var(--border); border-radius: 20px; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: var(--surf);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 28px;
+      display: flex; align-items: center; gap: 10px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      padding: 4px 12px; border-radius: 20px;
+      border: 1px solid var(--brd2); background: var(--surf2);
+      color: var(--muted); font-size: 12px; cursor: pointer;
+      transition: all 0.14s; white-space: nowrap;
+    }
+    .filter-chip:hover { color: var(--text); border-color: var(--dim); }
+    .filter-chip.active { background: rgba(124,108,252,0.15); border-color: var(--accent); color: #c4b5fd; }
+    .toolbar-spacer { flex: 1; }
+    .sort-btn {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--muted); padding: 5px 12px; border-radius: 6px;
+      font-size: 12px; cursor: pointer; transition: all 0.12s;
+    }
+    .sort-btn:hover { color: var(--text); }
+    .sort-btn.active { color: var(--accent); border-color: var(--accent); }
+    .search-input {
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--text); padding: 5px 12px; border-radius: 6px;
+      font-size: 12px; outline: none; width: 200px;
+      font-family: inherit;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--muted); }
+
+    /* ── Main ── */
+    .content {
+      max-width: 1200px; margin: 0 auto;
+      padding: 28px 28px;
+    }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surf);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+    .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Leaderboard table ── */
+    .lb-table-wrap { overflow-x: auto; }
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .lb-table thead th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--brd2);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.12s;
+    }
+    .lb-table thead th:hover { color: var(--text); }
+    .lb-table thead th.sort-active { color: var(--accent); }
+    .lb-table thead th.sort-active::after { content: ' ↓'; font-size: 10px; }
+    .lb-table thead th.sort-active.asc::after { content: ' ↑'; }
+
+    .lb-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+      cursor: pointer;
+    }
+    .lb-table tbody tr:hover { background: var(--surf2); }
+    .lb-table tbody tr.highlighted { background: rgba(124,108,252,0.06); border-left: 2px solid var(--accent); }
+
+    .lb-table td { padding: 12px 14px; vertical-align: middle; }
+
+    /* Rank cell */
+    .rank-cell { text-align: center; min-width: 40px; }
+    .rank-num { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .rank-1 { color: var(--gold); }
+    .rank-2 { color: var(--silver); }
+    .rank-3 { color: var(--bronze); }
+    .rank-other { color: var(--muted); }
+    .rank-medal { font-size: 18px; line-height: 1; }
+
+    /* Policy name */
+    .policy-name { font-size: 14px; font-weight: 700; color: #fff; }
+    .policy-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .policy-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+    .policy-tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 4px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    /* Score cells */
+    .score-cell { white-space: nowrap; }
+    .score-big { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .score-sub { font-size: 10px; color: var(--muted); }
+
+    /* Sparkline bars */
+    .sparkline {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 28px;
+      min-width: 60px;
+    }
+    .spark-bar {
+      flex: 1;
+      min-width: 4px;
+      border-radius: 2px 2px 0 0;
+      transition: opacity 0.15s;
+    }
+    .sparkline:hover .spark-bar { opacity: 0.6; }
+    .sparkline:hover .spark-bar:hover { opacity: 1; }
+
+    /* Dim breakdown mini-bars */
+    .dim-bars { display: flex; flex-direction: column; gap: 3px; min-width: 120px; }
+    .dim-bar-row { display: flex; align-items: center; gap: 5px; }
+    .dim-bar-label { font-size: 10px; color: var(--muted); min-width: 55px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dim-bar-track { flex: 1; height: 4px; background: var(--brd2); border-radius: 2px; overflow: hidden; }
+    .dim-bar-fill  { height: 100%; border-radius: 2px; }
+    .dim-bar-val   { font-size: 10px; font-weight: 700; min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* Delta from prev run */
+    .delta { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .delta.pos { color: var(--green); }
+    .delta.neg { color: var(--red); }
+    .delta.neu { color: var(--muted); }
+
+    /* Detail row (expandable) */
+    .detail-row { display: none; }
+    .detail-row.open { display: table-row; }
+    .detail-cell {
+      background: var(--surf2);
+      border-bottom: 1px solid var(--brd2);
+      padding: 14px 20px;
+    }
+    .detail-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .detail-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 8px; }
+    .detail-notes { font-size: 13px; color: var(--text); line-height: 1.5; }
+    .detail-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+    /* ── Task filter tabs ── */
+    .task-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .task-tab {
+      padding: 9px 16px; font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.14s;
+      white-space: nowrap;
+    }
+    .task-tab:hover { color: var(--text); }
+    .task-tab.active { color: #fff; border-bottom-color: var(--accent); }
+
+    /* ── Empty state ── */
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13px; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surf2); border: 1px solid rgba(124,108,252,0.4);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      z-index: 300; opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 800px) {
+      header { padding: 10px 16px; }
+      .toolbar { padding: 10px 16px; }
+      .content { padding: 16px; }
+      .detail-inner { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">Policy<span>Leaderboard</span></div>
+    <div class="header-meta">Robot Policy Eval Rankings</div>
+  </div>
+  <div class="header-spacer"></div>
+  <span class="last-updated" id="last-updated">Loading…</span>
+  <button style="background:var(--surf2);border:1px solid var(--brd2);color:var(--text);padding:5px 13px;border-radius:7px;font-size:12px;cursor:pointer" onclick="exportCSV()">⬇ Export</button>
+</header>
+
+<div class="toolbar">
+  <span style="font-size:12px;color:var(--muted)">Filter:</span>
+  <div id="tag-filters"></div>
+  <div class="toolbar-spacer"></div>
+  <input class="search-input" id="search" type="text" placeholder="Search policies…" oninput="renderTable()">
+  <div id="sort-buttons" style="display:flex;gap:4px"></div>
+</div>
+
+<div class="content">
+  <div class="stats-bar" id="stats-bar"></div>
+  <div class="task-tabs" id="task-tabs"></div>
+  <div class="lb-table-wrap">
+    <table class="lb-table">
+      <thead id="table-head"></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+  <div id="empty-state" class="empty" style="display:none">No results match your filters.</div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════
+     DATA CONFIGURATION — edit this section
+     ════════════════════════════════════════════════ -->
+<script>
+const LEADERBOARD_META = {
+  title: 'synphonyco — Policy Eval Leaderboard',
+  lastUpdated: '2026-03-17',
+  scoreScale: 10,
+};
+
+// Evaluation dimensions
+const DIMENSIONS = [
+  { id: 'task_success',  name: 'Task Success',  weight: 0.30 },
+  { id: 'smoothness',    name: 'Smoothness',    weight: 0.20 },
+  { id: 'naturalness',   name: 'Naturalness',   weight: 0.20 },
+  { id: 'speed',         name: 'Speed',         weight: 0.15 },
+  { id: 'recovery',      name: 'Recovery',      weight: 0.15 },
+];
+
+// Policies data — add entries freely
+// history: array of past aggregate scores (oldest first) for sparkline
+const POLICIES = [
+  {
+    id: 'pi0-base',
+    name: 'π0 Base',
+    description: 'Pretrained π0 policy, no fine-tuning',
+    task: 'sweater-fold',
+    tags: ['baseline', 'pretrained'],
+    scores: { task_success: 5.2, smoothness: 6.8, naturalness: 6.1, speed: 5.5, recovery: 4.0 },
+    history: [4.8, 5.0, 5.2, 5.4, 5.8],
+    notes: 'Baseline for comparison. Some grasping failures on crumpled cloth.',
+    date: '2026-03-10',
+  },
+  {
+    id: 'pi0-ft-v1',
+    name: 'π0 Fine-tuned v1',
+    description: '50-demo fine-tune on sweater task',
+    task: 'sweater-fold',
+    tags: ['fine-tuned', 'v1'],
+    scores: { task_success: 7.4, smoothness: 7.2, naturalness: 7.0, speed: 6.5, recovery: 6.8 },
+    history: [5.2, 6.1, 6.8, 7.0, 7.2],
+    notes: 'Significant improvement. Still struggles with edge cases.',
+    date: '2026-03-13',
+  },
+  {
+    id: 'pi0-ft-v2',
+    name: 'π0 Fine-tuned v2',
+    description: '100-demo fine-tune + cosmos augmentation',
+    task: 'sweater-fold',
+    tags: ['fine-tuned', 'cosmos-aug', 'v2'],
+    scores: { task_success: 8.6, smoothness: 8.1, naturalness: 7.8, speed: 7.2, recovery: 8.0 },
+    history: [7.2, 7.5, 7.9, 8.2, 8.4],
+    notes: 'Cosmos augmentation clearly helps generalization. Best performer.',
+    date: '2026-03-16',
+  },
+  {
+    id: 'act-baseline',
+    name: 'ACT Baseline',
+    description: 'Action Chunking Transformer baseline',
+    task: 'sweater-fold',
+    tags: ['act', 'baseline'],
+    scores: { task_success: 6.0, smoothness: 5.5, naturalness: 5.8, speed: 6.2, recovery: 5.0 },
+    history: [5.5, 5.7, 5.9, 6.0, 6.0],
+    notes: 'Stable but lacks recovery. Good speed.',
+    date: '2026-03-11',
+  },
+  {
+    id: 'diffusion-policy',
+    name: 'Diffusion Policy',
+    description: 'DDPM-based diffusion policy',
+    task: 'sweater-fold',
+    tags: ['diffusion', 'baseline'],
+    scores: { task_success: 6.8, smoothness: 7.5, naturalness: 7.2, speed: 5.0, recovery: 5.5 },
+    history: [6.0, 6.2, 6.5, 6.7, 6.8],
+    notes: 'Smoothest motion of all baselines. Slow execution.',
+    date: '2026-03-12',
+  },
+  {
+    id: 'pi0-ft-v2-drawer',
+    name: 'π0 Fine-tuned v2',
+    description: 'Same model, different task',
+    task: 'drawer-open',
+    tags: ['fine-tuned', 'cosmos-aug', 'v2'],
+    scores: { task_success: 7.8, smoothness: 7.5, naturalness: 7.0, speed: 8.0, recovery: 7.2 },
+    history: [6.5, 7.0, 7.3, 7.5, 7.6],
+    notes: 'Strong generalization to drawer task with same policy.',
+    date: '2026-03-17',
+  },
+  {
+    id: 'act-drawer',
+    name: 'ACT Baseline',
+    description: 'ACT on drawer task',
+    task: 'drawer-open',
+    tags: ['act', 'baseline'],
+    scores: { task_success: 6.2, smoothness: 5.8, naturalness: 6.0, speed: 7.0, recovery: 5.2 },
+    history: [5.0, 5.5, 5.8, 6.0, 6.2],
+    notes: 'Decent speed but less reliable.',
+    date: '2026-03-14',
+  },
+];
+
+// All unique tasks
+const ALL_TASKS = [...new Set(POLICIES.map(p => p.task))];
+// All unique tags
+const ALL_TAGS = [...new Set(POLICIES.flatMap(p => p.tags))];
+
+const TAG_COLORS = {
+  baseline:    { bg: '#1a2030', color: '#60a5fa', border: '#1e3050' },
+  'fine-tuned':{ bg: '#1a2820', color: '#34d399', border: '#1e4030' },
+  'cosmos-aug':{ bg: '#2a1a40', color: '#a78bfa', border: '#3a2060' },
+  v1:          { bg: '#181820', color: '#94a3b8', border: '#252535' },
+  v2:          { bg: '#20180a', color: '#fbbf24', border: '#402810' },
+  act:         { bg: '#1a1a30', color: '#818cf8', border: '#252540' },
+  diffusion:   { bg: '#1a2a28', color: '#22d3ee', border: '#1e4040' },
+  pretrained:  { bg: '#1a2020', color: '#6ee7b7', border: '#1e3530' },
+};
+</script>
+<!-- ════════════════════════════════════════════════ -->
+
+<script>
+// ── State ──
+let activeTask    = 'all';
+let activeTags    = new Set();
+let sortKey       = 'aggregate';
+let sortAsc       = false;
+let expandedRows  = new Set();
+let searchQuery   = '';
+
+// ── Compute aggregates ──
+function computeAggregate(scores) {
+  const total = DIMENSIONS.reduce((a,d) => a + d.weight, 0);
+  const sum   = DIMENSIONS.reduce((a,d) => a + (scores[d.id] || 0) * d.weight, 0);
+  return total > 0 ? sum / total : 0;
+}
+
+const POLICIES_WITH_AGG = POLICIES.map(p => ({
+  ...p,
+  aggregate: computeAggregate(p.scores),
+}));
+
+// ── Init header ──
+document.getElementById('last-updated').textContent = `Updated ${LEADERBOARD_META.lastUpdated}`;
+
+// ── Build task tabs ──
+function buildTaskTabs() {
+  const tabsEl = document.getElementById('task-tabs');
+  const tabs = ['all', ...ALL_TASKS];
+  tabsEl.innerHTML = tabs.map(t => `
+    <div class="task-tab${t === activeTask ? ' active' : ''}" onclick="setTask('${t}')">
+      ${t === 'all' ? '🌐 All Tasks' : '📋 ' + t}
+    </div>`).join('');
+}
+
+function setTask(t) {
+  activeTask = t;
+  buildTaskTabs();
+  renderTable();
+}
+
+// ── Build tag filters ──
+function buildTagFilters() {
+  const el = document.getElementById('tag-filters');
+  el.innerHTML = '';
+  el.style.display = 'flex'; el.style.gap = '5px'; el.style.flexWrap = 'wrap';
+  ALL_TAGS.forEach(tag => {
+    const chip = document.createElement('div');
+    chip.className = `filter-chip${activeTags.has(tag) ? ' active' : ''}`;
+    chip.textContent = tag;
+    chip.onclick = () => {
+      activeTags.has(tag) ? activeTags.delete(tag) : activeTags.add(tag);
+      buildTagFilters();
+      renderTable();
+    };
+    el.appendChild(chip);
+  });
+}
+
+// ── Score color ──
+function scoreColor(score, max=10) {
+  const pct = score / max;
+  if (pct < 0.5) return `rgb(240,${Math.round(pct*2*155+52)},52)`;
+  return `rgb(${Math.round((1-(pct-0.5)*2)*240)},207,52)`;
+}
+
+// ── Sparkline SVG ──
+function sparklineSVG(history, color) {
+  if (!history || history.length === 0) return '<div class="sparkline"></div>';
+  const max = Math.max(...history, 1);
+  const bars = history.map((v, i) => {
+    const h = Math.round(v / max * 28);
+    const c = scoreColor(v);
+    return `<div class="spark-bar" style="height:${h}px;background:${c};opacity:${i===history.length-1?1:0.5}" title="${v}"></div>`;
+  }).join('');
+  return `<div class="sparkline">${bars}</div>`;
+}
+
+// ── Dim bars ──
+function dimBarsHTML(scores) {
+  return `<div class="dim-bars">${
+    DIMENSIONS.map(d => {
+      const v = scores[d.id] || 0;
+      const pct = (v / LEADERBOARD_META.scoreScale * 100).toFixed(1);
+      const c = scoreColor(v);
+      return `<div class="dim-bar-row">
+        <span class="dim-bar-label">${d.name}</span>
+        <div class="dim-bar-track"><div class="dim-bar-fill" style="width:${pct}%;background:${c}"></div></div>
+        <span class="dim-bar-val" style="color:${c}">${v.toFixed(1)}</span>
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+// ── Stats bar ──
+function renderStats(visible) {
+  const statsEl = document.getElementById('stats-bar');
+  if (visible.length === 0) { statsEl.innerHTML = ''; return; }
+
+  const best = visible.reduce((a,b) => b.aggregate > a.aggregate ? b : a);
+  const avg  = visible.reduce((a,b) => a + b.aggregate, 0) / visible.length;
+  const taskCount = [...new Set(visible.map(p => p.task))].length;
+  const latestDate = visible.reduce((a,b) => b.date > a.date ? b : a).date;
+
+  statsEl.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">🏆 Top Policy</div>
+      <div class="stat-value" style="font-size:15px;margin-top:2px">${best.name}</div>
+      <div class="stat-sub">Score: ${best.aggregate.toFixed(2)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📊 Average Score</div>
+      <div class="stat-value" style="color:${scoreColor(avg)}">${avg.toFixed(2)}</div>
+      <div class="stat-sub">across ${visible.length} policies</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📋 Tasks</div>
+      <div class="stat-value">${taskCount}</div>
+      <div class="stat-sub">${visible.length} entries total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📅 Latest Eval</div>
+      <div class="stat-value" style="font-size:15px;margin-top:2px">${latestDate}</div>
+      <div class="stat-sub">most recent run</div>
+    </div>
+  `;
+}
+
+// ── Render table ──
+function renderTable() {
+  searchQuery = document.getElementById('search').value.toLowerCase();
+
+  let filtered = POLICIES_WITH_AGG.filter(p => {
+    if (activeTask !== 'all' && p.task !== activeTask) return false;
+    if (activeTags.size > 0 && !p.tags.some(t => activeTags.has(t))) return false;
+    if (searchQuery && !p.name.toLowerCase().includes(searchQuery) &&
+        !p.description.toLowerCase().includes(searchQuery) &&
+        !p.tags.join(' ').toLowerCase().includes(searchQuery)) return false;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    let av = sortKey === 'aggregate' ? a.aggregate : (a.scores[sortKey] || 0);
+    let bv = sortKey === 'aggregate' ? b.aggregate : (b.scores[sortKey] || 0);
+    if (sortKey === 'name') { av = a.name; bv = b.name; }
+    if (sortKey === 'date') { av = a.date; bv = b.date; }
+    if (sortAsc) return av > bv ? 1 : -1;
+    return av < bv ? 1 : -1;
+  });
+
+  renderStats(filtered);
+
+  const empty = document.getElementById('empty-state');
+  empty.style.display = filtered.length === 0 ? '' : 'none';
+
+  // Table head
+  const headCols = [
+    { key: 'rank',      label: '#',          sortable: false },
+    { key: 'name',      label: 'Policy',     sortable: true  },
+    { key: 'task',      label: 'Task',       sortable: true  },
+    { key: 'aggregate', label: 'Score ↓',    sortable: true  },
+    { key: 'dims',      label: 'Dimensions', sortable: false },
+    { key: 'trend',     label: 'Trend',      sortable: false },
+    { key: 'date',      label: 'Date',       sortable: true  },
+    { key: 'delta',     label: '△ vs Prev',  sortable: false },
+  ];
+
+  document.getElementById('table-head').innerHTML = `<tr>${
+    headCols.map(c => {
+      const isActive = c.sortable && sortKey === c.key;
+      const cls = `${isActive ? 'sort-active' : ''}${isActive && sortAsc ? ' asc' : ''}`;
+      const click = c.sortable ? `onclick="setSort('${c.key}')"` : '';
+      return `<th class="${cls}" ${click}>${c.label}</th>`;
+    }).join('')
+  }</tr>`;
+
+  // Table body
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+
+  filtered.forEach((p, rank) => {
+    const rankNum = rank + 1;
+    const medal = rankNum === 1 ? '🥇' : rankNum === 2 ? '🥈' : rankNum === 3 ? '🥉' : '';
+    const rankClass = rankNum === 1 ? 'rank-1' : rankNum === 2 ? 'rank-2' : rankNum === 3 ? 'rank-3' : 'rank-other';
+    const aggColor = scoreColor(p.aggregate);
+    const isExpanded = expandedRows.has(p.id);
+
+    // Delta vs last history point
+    const prevScore = p.history && p.history.length > 1 ? p.history[p.history.length - 2] : null;
+    const delta = prevScore != null ? (p.aggregate - prevScore).toFixed(2) : null;
+    const deltaHTML = delta != null
+      ? `<span class="delta ${delta > 0 ? 'pos' : delta < 0 ? 'neg' : 'neu'}">${delta > 0 ? '▲' : delta < 0 ? '▼' : '─'} ${Math.abs(delta)}</span>`
+      : '<span class="delta neu">—</span>';
+
+    // Tag badges
+    const tagsHTML = p.tags.map(t => {
+      const tc = TAG_COLORS[t] || { bg:'#1a1a2a', color:'#888', border:'#252535' };
+      return `<span class="policy-tag" style="background:${tc.bg};color:${tc.color};border:1px solid ${tc.border}">${t}</span>`;
+    }).join('');
+
+    const row = document.createElement('tr');
+    row.className = isExpanded ? 'highlighted' : '';
+    row.innerHTML = `
+      <td class="rank-cell">
+        ${medal ? `<div class="rank-medal">${medal}</div>` : `<div class="rank-num ${rankClass}">${rankNum}</div>`}
+      </td>
+      <td>
+        <div class="policy-name">${p.name}</div>
+        <div class="policy-meta">${p.description}</div>
+        <div class="policy-tags">${tagsHTML}</div>
+      </td>
+      <td><span style="font-size:12px;color:var(--muted)">${p.task}</span></td>
+      <td class="score-cell">
+        <div class="score-big" style="color:${aggColor}">${p.aggregate.toFixed(2)}</div>
+        <div class="score-sub">/ ${LEADERBOARD_META.scoreScale}</div>
+      </td>
+      <td>${dimBarsHTML(p.scores)}</td>
+      <td>${sparklineSVG(p.history)}</td>
+      <td><span style="font-size:12px;color:var(--muted)">${p.date}</span></td>
+      <td>${deltaHTML}</td>
+    `;
+    row.onclick = () => toggleExpand(p.id);
+    tbody.appendChild(row);
+
+    // Detail row
+    const detailRow = document.createElement('tr');
+    detailRow.className = `detail-row${isExpanded ? ' open' : ''}`;
+    detailRow.id = `detail-${p.id}`;
+    detailRow.innerHTML = `
+      <td class="detail-cell" colspan="8">
+        <div class="detail-inner">
+          <div>
+            <div class="detail-section-title">Notes</div>
+            <div class="detail-notes">${p.notes || '—'}</div>
+          </div>
+          <div>
+            <div class="detail-section-title">All Scores</div>
+            ${DIMENSIONS.map(d => {
+              const v = p.scores[d.id] || 0;
+              const c = scoreColor(v);
+              return `<div style="font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+                <span style="color:var(--muted)">${d.name}</span>
+                <span style="color:${c};font-weight:700">${v.toFixed(1)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+          <div>
+            <div class="detail-section-title">History (${p.history?.length || 0} runs)</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+              ${(p.history||[]).map((v,i) => {
+                const c = scoreColor(v);
+                return `<span style="font-size:11px;font-weight:700;color:${c};background:rgba(0,0,0,0.3);padding:2px 7px;border-radius:4px;border:1px solid ${c}33">${v.toFixed(1)}</span>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailRow);
+  });
+}
+
+function toggleExpand(id) {
+  if (expandedRows.has(id)) expandedRows.delete(id);
+  else expandedRows.add(id);
+  renderTable();
+}
+
+function setSort(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = false; }
+  renderTable();
+}
+
+// ── CSV export ──
+function exportCSV() {
+  const cols = ['rank','id','name','description','task','tags','aggregate','date',
+    ...DIMENSIONS.map(d=>d.id)];
+  const rows = POLICIES_WITH_AGG.map((p,i) => [
+    i+1, p.id, p.name, p.description, p.task, p.tags.join('|'),
+    p.aggregate.toFixed(3), p.date,
+    ...DIMENSIONS.map(d => p.scores[d.id] || 0),
+  ]);
+  const csv = [cols.join(','), ...rows.map(r => r.map(c => JSON.stringify(c)).join(','))].join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'policy-leaderboard.csv'});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${rows.length} policies`);
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// ── Init ──
+buildTaskTabs();
+buildTagFilters();
+renderTable();
+</script>
+</body>
+</html>

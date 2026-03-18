@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RobotDataTimeline — Trajectory Visualization</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #07070e;
+      --surf:   #0d0d1a;
+      --surf2:  #121220;
+      --surf3:  #181828;
+      --border: #1c1c30;
+      --brd2:   #232338;
+      --text:   #e0e0f4;
+      --muted:  #545472;
+      --accent: #7c6cfc;
+      --acc2:   #5a4de0;
+      --r:      10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: rgba(7,7,14,0.97); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent); }
+    .header-spacer { flex: 1; }
+
+    .main { padding: 24px; max-width: 1300px; margin: 0 auto; }
+
+    /* ── Input panel ── */
+    .input-row {
+      display: grid; grid-template-columns: 1fr 320px;
+      gap: 16px; margin-bottom: 20px; align-items: start;
+    }
+    .panel {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .panel-hdr {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      background: var(--surf2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-hdr h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .panel-body { padding: 16px; }
+
+    textarea.json-input {
+      width: 100%; min-height: 180px; resize: vertical;
+      background: var(--surf2); border: 1px solid var(--brd2);
+      border-radius: 7px; color: #a5b4fc;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+      padding: 10px 12px; outline: none; line-height: 1.6;
+      transition: border-color 0.15s;
+    }
+    textarea.json-input:focus { border-color: var(--accent); }
+
+    label.field-lbl { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+
+    input[type=text], input[type=url] {
+      width: 100%; background: var(--surf2); border: 1px solid var(--brd2);
+      border-radius: 7px; color: var(--text); font-family: inherit;
+      font-size: 13px; padding: 8px 12px; outline: none; transition: border-color 0.15s;
+      margin-bottom: 10px;
+    }
+    input[type=text]:focus, input[type=url]:focus { border-color: var(--accent); }
+    input[type=text]::placeholder, input[type=url]::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 700;
+      cursor: pointer; border: none; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; width: 100%; }
+    .btn-primary:hover { background: var(--acc2); }
+    .btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .btn-ghost:hover { background: var(--surf3); }
+
+    /* Example loader */
+    .example-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .ex-btn {
+      background: var(--surf3); border: 1px solid var(--brd2); color: var(--muted);
+      padding: 4px 10px; border-radius: 5px; font-size: 11px; cursor: pointer; transition: all 0.12s;
+    }
+    .ex-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Chart area ── */
+    .charts-panel { margin-bottom: 16px; }
+    .chart-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-bottom: 12px;
+    }
+    .chart-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .chart-card-hdr {
+      padding: 8px 14px; border-bottom: 1px solid var(--border);
+      background: var(--surf2); display: flex; align-items: center; justify-content: space-between;
+    }
+    .chart-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    canvas.chart-canvas { width: 100% !important; }
+
+    /* ── Video sync panel ── */
+    .video-sync-panel {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden; margin-bottom: 16px;
+    }
+    .video-sync-inner {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .video-half {
+      border-right: 1px solid var(--border);
+      padding: 14px;
+    }
+    .video-half:last-child { border-right: none; }
+    .video-wrap { aspect-ratio: 16/9; background: #000; border-radius: 7px; overflow: hidden; }
+    .video-wrap video { width: 100%; height: 100%; object-fit: contain; }
+
+    /* ── Playhead / scrubber ── */
+    .playhead-bar {
+      background: var(--surf2); border-top: 1px solid var(--border);
+      padding: 10px 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .ph-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
+    input[type=range]#playhead-scr {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px;
+      outline: none; cursor: pointer; margin-bottom: 0;
+      background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct, 0%), var(--brd2) var(--pct, 0%), var(--brd2) 100%);
+    }
+    input[type=range]#playhead-scr::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+    }
+    .ph-btn {
+      background: var(--surf3); border: 1px solid var(--brd2); color: var(--text);
+      padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    }
+    .ph-btn:hover { background: var(--surf2); }
+
+    /* ── Stats ── */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px; margin-bottom: 16px;
+    }
+    .stat-mini {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+    }
+    .stat-mini-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-mini-val   { font-size: 18px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+    /* ── Empty / error states ── */
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 13px; }
+    .error-box { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #fca5a5; margin-bottom: 10px; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surf2); border: 1px solid rgba(124,108,252,0.4);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      z-index: 300; opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) {
+      .input-row { grid-template-columns: 1fr; }
+      .chart-row { grid-template-columns: 1fr; }
+      .video-sync-inner { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Robot<span>Data</span>Timeline</div>
+  <span style="font-size:12px;color:var(--muted)">Trajectory Visualization & Video Sync</span>
+  <div class="header-spacer"></div>
+  <button class="btn btn-ghost" onclick="exportData()" style="font-size:12px;padding:5px 14px">⬇ Export CSV</button>
+</header>
+
+<div class="main">
+
+  <!-- Input row -->
+  <div class="input-row">
+
+    <!-- JSON input -->
+    <div class="panel">
+      <div class="panel-hdr"><h2>📊 Trajectory JSON</h2></div>
+      <div class="panel-body">
+        <div style="margin-bottom:8px">
+          <div class="field-lbl" style="margin-bottom:6px">Load Example:</div>
+          <div class="example-btns">
+            <button class="ex-btn" onclick="loadExample('arm6dof')">6-DOF Arm</button>
+            <button class="ex-btn" onclick="loadExample('gripper')">Gripper</button>
+            <button class="ex-btn" onclick="loadExample('mobile')">Mobile Base</button>
+            <button class="ex-btn" onclick="loadExample('hdf5sim')">HDF5-style</button>
+          </div>
+        </div>
+        <div class="field-lbl">Paste JSON Trajectory Data:</div>
+        <div class="field-hint" style="font-size:11px;color:var(--muted);margin-bottom:6px">
+          Formats: <code style="font-size:10px;background:var(--surf2);padding:1px 4px;border-radius:3px">{ joints: [...], timestamps: [...] }</code> or array of timestep objects
+        </div>
+        <div id="json-error" class="error-box" style="display:none"></div>
+        <textarea class="json-input" id="json-input" placeholder='{"joints":["joint1","joint2"],"timestamps":[0,0.1,0.2],"data":[[0,0],[0.1,0.05],[0.2,0.1]]}'></textarea>
+        <button class="btn btn-primary" onclick="parseAndRender()" style="margin-top:8px">▶ Visualize</button>
+      </div>
+    </div>
+
+    <!-- Config panel -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="panel">
+        <div class="panel-hdr"><h2>🎥 Video Sync (optional)</h2></div>
+        <div class="panel-body">
+          <div class="field-lbl">Video A URL</div>
+          <input type="url" id="video-a-url" placeholder="original.mp4">
+          <div class="field-lbl">Video B URL (optional)</div>
+          <input type="url" id="video-b-url" placeholder="generated_1.mp4">
+          <button class="btn btn-ghost" onclick="loadVideos()" style="width:100%;font-size:12px;padding:6px">Load Videos</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-hdr"><h2>⚙️ Chart Options</h2></div>
+        <div class="panel-body">
+          <div class="field-lbl">Chart Type</div>
+          <select id="chart-type" onchange="rerender()" style="width:100%;background:var(--surf2);border:1px solid var(--brd2);color:var(--text);font-size:12px;padding:5px 10px;border-radius:6px;outline:none;margin-bottom:10px">
+            <option value="line">Line Chart</option>
+            <option value="area">Area Chart</option>
+          </select>
+          <div class="field-lbl">Smoothing Window</div>
+          <input type="range" id="smooth-window" min="1" max="20" step="1" value="1"
+            oninput="document.getElementById('smooth-val').textContent=this.value;rerender()"
+            style="width:100%;margin-bottom:4px;-webkit-appearance:none;appearance:none;height:4px;background:var(--brd2);border-radius:2px;outline:none;cursor:pointer">
+          <div style="font-size:11px;color:var(--muted)">Window: <span id="smooth-val">1</span> frames</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Stats row (hidden until data loaded) -->
+  <div class="stats-row" id="stats-row" style="display:none"></div>
+
+  <!-- Charts (hidden until data loaded) -->
+  <div class="charts-panel" id="charts-panel">
+    <div class="empty-state">
+      <div style="font-size:40px;margin-bottom:12px">📊</div>
+      Paste trajectory JSON above and click Visualize
+    </div>
+  </div>
+
+  <!-- Video sync (hidden until videos loaded) -->
+  <div id="video-section" style="display:none">
+    <div class="video-sync-panel">
+      <div class="panel-hdr"><h2>🎬 Video Sync</h2></div>
+      <div class="video-sync-inner">
+        <div class="video-half">
+          <div class="field-lbl" style="margin-bottom:6px">Video A</div>
+          <div class="video-wrap"><video id="vid-a" playsinline loop muted></video></div>
+        </div>
+        <div class="video-half">
+          <div class="field-lbl" style="margin-bottom:6px">Video B</div>
+          <div class="video-wrap"><video id="vid-b" playsinline loop muted></video></div>
+        </div>
+      </div>
+      <div class="playhead-bar">
+        <button class="ph-btn" onclick="toggleVidPlay()" id="vid-play-btn">▶</button>
+        <span class="ph-time" id="vid-cur">0:00</span>
+        <input type="range" id="playhead-scr" min="0" max="100" step="0.05" value="0">
+        <span class="ph-time" id="vid-dur">0:00</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<!-- Chart.js CDN (loaded from unpkg, no API key) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+// ─────────────────────────────────────────
+// Example datasets
+// ─────────────────────────────────────────
+const EXAMPLES = {
+  arm6dof: {
+    description: '6-DOF robotic arm — pick and place',
+    joints: ['shoulder_pan','shoulder_lift','elbow','wrist1','wrist2','wrist3'],
+    timestamps: Array.from({length:100}, (_,i) => i * 0.033),
+    data: Array.from({length:100}, (_,t) => [
+      Math.sin(t/100 * Math.PI) * 1.5,
+      -0.5 + Math.sin(t/100 * Math.PI * 2) * 0.8,
+      0.8 + Math.cos(t/100 * Math.PI) * 0.6,
+      Math.sin(t/80 * Math.PI) * 0.4,
+      0.1 * Math.sin(t/40 * Math.PI),
+      Math.sin(t/60 * Math.PI + 0.5) * 0.3,
+    ]),
+  },
+  gripper: {
+    description: 'UMI gripper — cloth folding task',
+    joints: ['x','y','z','grip_open'],
+    timestamps: Array.from({length:80}, (_,i) => i * 0.05),
+    data: Array.from({length:80}, (_,t) => [
+      0.3 + Math.sin(t/80 * Math.PI * 2) * 0.2,
+      0.1 + Math.abs(Math.sin(t/80 * Math.PI)) * 0.3,
+      0.5 + Math.cos(t/80 * Math.PI) * 0.1,
+      t < 40 ? 1 - t/80 : t/80 - 0.5,
+    ]),
+  },
+  mobile: {
+    description: 'Mobile manipulator — navigation',
+    joints: ['base_x','base_y','base_theta','arm_extension'],
+    timestamps: Array.from({length:120}, (_,i) => i * 0.1),
+    data: Array.from({length:120}, (_,t) => [
+      t * 0.02,
+      Math.sin(t/120 * Math.PI * 4) * 0.5,
+      t * 0.03,
+      Math.max(0, Math.sin(t/120 * Math.PI * 2)) * 0.8,
+    ]),
+  },
+  hdf5sim: {
+    description: 'HDF5-style simulation data — drawer opening',
+    joints: ['q0','q1','q2','q3','q4','q5','gripper'],
+    timestamps: Array.from({length:150}, (_,i) => i * 0.02),
+    data: Array.from({length:150}, (_,t) => {
+      const p = t/150;
+      return [
+        p * 0.4 + Math.sin(t/20) * 0.02,
+        -0.3 + p * 0.6 + Math.sin(t/15) * 0.015,
+        0.5 - p * 0.3,
+        Math.sin(t/25 + 0.3) * 0.8,
+        0.1 + Math.cos(t/30) * 0.05,
+        p * 0.2,
+        p > 0.6 ? (p-0.6)/0.4 : 0,
+      ];
+    }),
+  },
+};
+
+function loadExample(name) {
+  const ex = EXAMPLES[name];
+  if (!ex) return;
+  document.getElementById('json-input').value = JSON.stringify(ex, null, 2);
+  parseAndRender();
+  showToast(`Loaded: ${ex.description}`);
+}
+
+// ─────────────────────────────────────────
+// Parsing
+// ─────────────────────────────────────────
+let parsedData = null;
+let chartInstances = [];
+
+function parseAndRender() {
+  const raw = document.getElementById('json-input').value.trim();
+  const errEl = document.getElementById('json-error');
+  errEl.style.display = 'none';
+
+  if (!raw) { showToast('Paste some JSON first!'); return; }
+
+  let obj;
+  try { obj = JSON.parse(raw); }
+  catch(e) { errEl.textContent = `JSON parse error: ${e.message}`; errEl.style.display = ''; return; }
+
+  // Normalize to { joints, timestamps, data, description }
+  let joints, timestamps, data, description = '';
+
+  if (obj.joints && obj.timestamps && obj.data) {
+    // Standard format
+    joints = obj.joints; timestamps = obj.timestamps; data = obj.data;
+    description = obj.description || '';
+  } else if (Array.isArray(obj)) {
+    // Array of timestep objects: [{t, j0, j1, ...}, ...]
+    const keys = Object.keys(obj[0]).filter(k => k !== 't' && k !== 'time' && k !== 'timestamp');
+    joints = keys;
+    timestamps = obj.map(r => r.t ?? r.time ?? r.timestamp ?? 0);
+    data = obj.map(r => keys.map(k => r[k] ?? 0));
+  } else {
+    errEl.textContent = 'Unsupported format. Expected {joints, timestamps, data} or array of timestep objects.';
+    errEl.style.display = ''; return;
+  }
+
+  parsedData = { joints, timestamps, data, description };
+  renderCharts();
+  renderStats();
+}
+
+// ─────────────────────────────────────────
+// Smoothing
+// ─────────────────────────────────────────
+function smooth(arr, w) {
+  if (w <= 1) return arr;
+  return arr.map((v, i) => {
+    const slice = arr.slice(Math.max(0, i-Math.floor(w/2)), i+Math.ceil(w/2)+1);
+    return slice.reduce((a,b)=>a+b,0) / slice.length;
+  });
+}
+
+// ─────────────────────────────────────────
+// Chart rendering
+// ─────────────────────────────────────────
+const COLORS = [
+  '#7c6cfc','#22d3ee','#34d399','#f472b6','#fbbf24','#f87171',
+  '#a78bfa','#38bdf8','#6ee7b7','#f9a8d4','#fde68a','#fca5a5',
+];
+
+function renderCharts() {
+  if (!parsedData) return;
+  const { joints, timestamps, data } = parsedData;
+  const chartType = document.getElementById('chart-type').value;
+  const smoothW   = parseInt(document.getElementById('smooth-window').value);
+
+  // Destroy old charts
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+
+  const panel = document.getElementById('charts-panel');
+  panel.innerHTML = '';
+
+  // Group joints into charts of max 4 per chart
+  const chunkSize = 4;
+  const chunks = [];
+  for (let i = 0; i < joints.length; i += chunkSize) {
+    chunks.push(joints.slice(i, i + chunkSize));
+  }
+
+  // Create chart rows
+  for (let ci = 0; ci < chunks.length; ci += 2) {
+    const row = document.createElement('div');
+    row.className = 'chart-row';
+
+    [0, 1].forEach(offset => {
+      const chunkIdx = ci + offset;
+      if (chunkIdx >= chunks.length) return;
+      const chunk = chunks[chunkIdx];
+
+      const card = document.createElement('div');
+      card.className = 'chart-card';
+
+      const globalStart = ci * chunkSize + offset * chunkSize;
+      const title = chunk.length > 1 ? `Joints ${globalStart}–${globalStart + chunk.length - 1}` : chunk[0];
+      card.innerHTML = `
+        <div class="chart-card-hdr">
+          <span class="chart-card-title">${title}</span>
+          <span style="font-size:10px;color:var(--muted)">${chunk.join(', ')}</span>
+        </div>
+        <canvas class="chart-canvas" id="chart-${ci}-${offset}" height="180"></canvas>
+      `;
+      row.appendChild(card);
+
+      // Build datasets
+      const datasets = chunk.map((joint, ji) => {
+        const jIdx = joints.indexOf(joint);
+        const vals = smooth(data.map(row => row[jIdx] ?? 0), smoothW);
+        const color = COLORS[(globalStart + ji) % COLORS.length];
+        return {
+          label: joint,
+          data: vals,
+          borderColor: color,
+          backgroundColor: chartType === 'area' ? color + '22' : 'transparent',
+          fill: chartType === 'area',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: smoothW > 1 ? 0.4 : 0.0,
+        };
+      });
+
+      // Create after DOM insertion
+      setTimeout(() => {
+        const canvas = document.getElementById(`chart-${ci}-${offset}`);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const chart = new Chart(ctx, {
+          type: 'line',
+          data: { labels: timestamps.map(t => t.toFixed(2)), datasets },
+          options: {
+            responsive: true,
+            animation: { duration: 300 },
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+              legend: {
+                labels: { color: '#888', font: { size: 10 }, boxWidth: 12 }
+              },
+              tooltip: {
+                backgroundColor: '#12122088', borderColor: '#262640',
+                borderWidth: 1, titleColor: '#eee', bodyColor: '#aaa',
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: '#444', maxTicksLimit: 10, font: { size: 10 } },
+                grid: { color: '#1c1c30' },
+                title: { display: true, text: 'time (s)', color: '#555', font: { size: 10 } },
+              },
+              y: {
+                ticks: { color: '#444', font: { size: 10 } },
+                grid: { color: '#1c1c30' },
+              },
+            },
+          },
+        });
+        chart._jointIdxStart = globalStart;
+        chartInstances.push(chart);
+
+        // Playhead line plugin
+        chart._playheadT = 0;
+        chart.options.plugins.annotation = {};
+      }, 0);
+    });
+
+    panel.appendChild(row);
+  }
+}
+
+function rerender() {
+  if (parsedData) renderCharts();
+}
+
+// ─────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────
+function renderStats() {
+  if (!parsedData) return;
+  const { joints, timestamps, data } = parsedData;
+  const dur = timestamps[timestamps.length-1] - timestamps[0];
+
+  document.getElementById('stats-row').style.display = '';
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-mini"><div class="stat-mini-label">Duration</div><div class="stat-mini-val" style="color:var(--accent)">${dur.toFixed(2)}s</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">Timesteps</div><div class="stat-mini-val">${timestamps.length}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">Joints</div><div class="stat-mini-val" style="color:var(--cyan)">${joints.length}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">Avg FPS</div><div class="stat-mini-val">${dur > 0 ? (timestamps.length/dur).toFixed(1) : '—'}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">Max |vel|</div><div class="stat-mini-val" style="color:var(--amber)">${computeMaxVel(data).toFixed(3)}</div></div>
+  `;
+}
+
+function computeMaxVel(data) {
+  let max = 0;
+  for (let i = 1; i < data.length; i++) {
+    for (let j = 0; j < data[i].length; j++) {
+      const v = Math.abs(data[i][j] - data[i-1][j]);
+      if (v > max) max = v;
+    }
+  }
+  return max;
+}
+
+// ─────────────────────────────────────────
+// Video sync
+// ─────────────────────────────────────────
+function loadVideos() {
+  const urlA = document.getElementById('video-a-url').value.trim();
+  const urlB = document.getElementById('video-b-url').value.trim();
+  if (!urlA) { showToast('Enter at least Video A URL'); return; }
+
+  const vidA = document.getElementById('vid-a');
+  const vidB = document.getElementById('vid-b');
+  vidA.src = urlA; vidA.load();
+  if (urlB) { vidB.src = urlB; vidB.load(); }
+
+  document.getElementById('video-section').style.display = '';
+
+  vidA.addEventListener('loadedmetadata', () => {
+    const scr = document.getElementById('playhead-scr');
+    scr.max = vidA.duration;
+    document.getElementById('vid-dur').textContent = fmtT(vidA.duration);
+  }, { once: true });
+
+  vidA.play().catch(()=>{});
+  if (urlB) vidB.play().catch(()=>{});
+  showToast('Videos loaded — use scrubber to sync with trajectory');
+}
+
+const phScr = document.getElementById('playhead-scr');
+let phDrag = false;
+phScr.addEventListener('mousedown', () => { phDrag = true; });
+phScr.addEventListener('mouseup', () => {
+  const t = parseFloat(phScr.value);
+  const vidA = document.getElementById('vid-a');
+  const vidB = document.getElementById('vid-b');
+  vidA.currentTime = t; vidB.currentTime = t;
+  phDrag = false;
+  updatePlayhead(t);
+});
+phScr.addEventListener('input', () => updatePlayhead(parseFloat(phScr.value)));
+
+function updatePlayhead(t) {
+  document.getElementById('vid-cur').textContent = fmtT(t);
+  const vidA = document.getElementById('vid-a');
+  const pct = vidA.duration ? (t/vidA.duration*100).toFixed(2) : 0;
+  phScr.style.setProperty('--pct', pct+'%');
+  // Sync playhead line on charts (highlight nearest timestamp)
+  if (parsedData) {
+    const nearestIdx = parsedData.timestamps.reduce((best, ts, i) =>
+      Math.abs(ts - t) < Math.abs(parsedData.timestamps[best] - t) ? i : best, 0);
+    chartInstances.forEach(chart => {
+      // Remove old playhead datasets if any, re-add
+      // For simplicity: use chart.tooltip to show nearest point
+      chart.tooltip.setActiveElements(
+        chart.data.datasets.map((_,di) => ({ datasetIndex: di, index: nearestIdx })),
+        { x: 0, y: 0 }
+      );
+      chart.update('none');
+    });
+  }
+}
+
+setInterval(() => {
+  const vidA = document.getElementById('vid-a');
+  if (!vidA.paused && !phDrag && vidA.duration) {
+    phScr.value = vidA.currentTime;
+    updatePlayhead(vidA.currentTime);
+  }
+}, 100);
+
+function toggleVidPlay() {
+  const vidA = document.getElementById('vid-a');
+  const vidB = document.getElementById('vid-b');
+  const btn  = document.getElementById('vid-play-btn');
+  if (vidA.paused) { vidA.play(); vidB.play(); btn.textContent='⏸'; }
+  else             { vidA.pause(); vidB.pause(); btn.textContent='▶'; }
+}
+
+// ─────────────────────────────────────────
+// Export CSV
+// ─────────────────────────────────────────
+function exportData() {
+  if (!parsedData) { showToast('No data to export!'); return; }
+  const { joints, timestamps, data } = parsedData;
+  const header = ['timestamp', ...joints];
+  const rows = timestamps.map((t, i) => [t, ...data[i]]);
+  const csv = [header, ...rows].map(r => r.map(v => JSON.stringify(v)).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'trajectory.csv' });
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${timestamps.length} timesteps`);
+}
+
+function fmtT(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+
+// ─────────────────────────────────────────
+// Toast + keyboard
+// ─────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  if (e.key === ' ') { e.preventDefault(); toggleVidPlay(); }
+});
+
+// ─────────────────────────────────────────
+// Auto-load first example
+// ─────────────────────────────────────────
+window.addEventListener('load', () => {
+  loadExample('arm6dof');
+});
+</script>
+</body>
+</html>

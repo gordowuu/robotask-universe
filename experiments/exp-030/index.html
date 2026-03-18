@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FailureAtlas — Failure Mode Taxonomy Browser</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#252525;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;min-height:100vh}
+
+header{padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--red)}
+.header-actions{display:flex;gap:8px}
+.btn{padding:7px 16px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.8rem;font-family:inherit;transition:all .15s}
+.btn:hover{border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.main{display:flex;min-height:calc(100vh - 49px)}
+
+/* Sidebar */
+.sidebar{width:280px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-header{padding:14px 16px;border-bottom:1px solid var(--border);font-size:.82rem;font-weight:600}
+.filter-section{padding:12px 16px;border-bottom:1px solid var(--border)}
+.filter-label{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.category-list{display:flex;flex-direction:column;gap:4px}
+.cat-btn{display:flex;align-items:center;gap:10px;padding:8px 12px;border:none;background:transparent;color:var(--fg);border-radius:8px;cursor:pointer;font-size:.8rem;text-align:left;transition:background .15s;font-family:inherit;width:100%}
+.cat-btn:hover{background:rgba(255,255,255,.04)}
+.cat-btn.active{background:rgba(41,151,255,.1);color:var(--accent)}
+.cat-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
+.cat-btn .cat-count{margin-left:auto;font-size:.7rem;color:var(--dim);background:rgba(255,255,255,.06);padding:2px 6px;border-radius:10px}
+
+.severity-row{display:flex;gap:4px;margin-top:6px}
+.sev-btn{flex:1;padding:5px 8px;border:1px solid var(--border);background:transparent;color:var(--dim);border-radius:4px;cursor:pointer;font-size:.7rem;font-family:inherit;transition:all .15s}
+.sev-btn:hover,.sev-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(41,151,255,.08)}
+
+/* Content */
+.content{flex:1;padding:24px;overflow-y:auto}
+
+/* Summary Cards */
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.summary-card{padding:16px;border-radius:10px;background:var(--card);border:1px solid var(--border);text-align:center}
+.summary-value{font-size:1.5rem;font-weight:700}
+.summary-label{font-size:.7rem;color:var(--dim);margin-top:2px;text-transform:uppercase}
+
+/* Charts */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.chart-title{font-size:.82rem;font-weight:600;margin-bottom:10px}
+.chart-container{position:relative;height:220px}
+
+/* Failure Cards */
+.failure-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:24px}
+.failure-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .2s,border-color .2s}
+.failure-card:hover{transform:translateY(-3px);border-color:var(--accent)}
+.failure-thumb{height:120px;background:#111;display:flex;align-items:center;justify-content:center;position:relative}
+.failure-thumb canvas{width:100%;height:100%;object-fit:cover}
+.failure-thumb .sev-badge{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:4px;font-size:.65rem;font-weight:600;text-transform:uppercase}
+.sev-critical{background:rgba(255,69,58,.2);color:var(--red)}
+.sev-major{background:rgba(255,159,10,.2);color:var(--orange)}
+.sev-minor{background:rgba(255,214,10,.2);color:var(--yellow)}
+.sev-cosmetic{background:rgba(134,134,139,.2);color:var(--dim)}
+.failure-body{padding:12px}
+.failure-body h4{font-size:.85rem;font-weight:600;margin-bottom:4px}
+.failure-body .fail-meta{font-size:.72rem;color:var(--dim);display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.failure-body .fail-desc{font-size:.78rem;color:var(--dim);line-height:1.5}
+.fail-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.fail-tag{padding:2px 6px;border-radius:3px;font-size:.65rem;background:rgba(255,255,255,.05);color:var(--dim)}
+
+/* Detail Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;display:flex;align-items:center;justify-content:center}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:600px;max-width:90vw;max-height:85vh;overflow-y:auto}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:1rem;font-weight:600}
+.modal-close{width:28px;height:28px;border:none;background:rgba(255,255,255,.06);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.85rem}
+.modal-body{padding:20px 24px}
+.detail-section{margin-bottom:16px}
+.detail-label{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.detail-value{font-size:.88rem;line-height:1.6}
+.action-items{list-style:none;padding:0}
+.action-items li{padding:6px 0;border-bottom:1px solid var(--border);font-size:.82rem;display:flex;align-items:flex-start;gap:8px}
+.action-items li::before{content:'→';color:var(--accent);flex-shrink:0}
+
+@media(max-width:768px){
+  .main{flex-direction:column}
+  .sidebar{width:100%;max-height:300px;overflow-y:auto}
+  .summary-row{grid-template-columns:repeat(2,1fr)}
+  .charts-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 <span>FailureAtlas</span></h1>
+  <div class="header-actions">
+    <button class="btn" onclick="exportReport()">📋 Export Report</button>
+    <button class="btn" onclick="addFailure()">+ Log Failure</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">Failure Categories</div>
+    <div class="filter-section">
+      <div class="filter-label">Category</div>
+      <div class="category-list" id="categoryList"></div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Severity</div>
+      <div class="severity-row">
+        <button class="sev-btn active" data-sev="all" onclick="filterSeverity('all')">All</button>
+        <button class="sev-btn" data-sev="critical" onclick="filterSeverity('critical')">Critical</button>
+        <button class="sev-btn" data-sev="major" onclick="filterSeverity('major')">Major</button>
+        <button class="sev-btn" data-sev="minor" onclick="filterSeverity('minor')">Minor</button>
+      </div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-label">Sort By</div>
+      <div class="severity-row">
+        <button class="sev-btn active" data-sort="recent" onclick="sortBy('recent')">Recent</button>
+        <button class="sev-btn" data-sort="severity" onclick="sortBy('severity')">Severity</button>
+        <button class="sev-btn" data-sort="frequency" onclick="sortBy('frequency')">Frequency</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="content">
+    <div class="summary-row" id="summaryRow"></div>
+    <div class="charts-row" id="chartsRow"></div>
+    <div class="failure-grid" id="failureGrid"></div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay hidden" id="detailModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Failure Detail</h3>
+      <button class="modal-close" onclick="document.getElementById('detailModal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+Chart.defaults.color = '#86868b';
+Chart.defaults.borderColor = '#252525';
+Chart.defaults.font.family = "-apple-system,sans-serif";
+Chart.defaults.font.size = 11;
+
+/* ═══ Data ═══ */
+const CATEGORIES = [
+  { id: 'grasp_slip', name: 'Grasp Slip', icon: '🤲', color: '#ff453a', desc: 'Object slips from gripper during manipulation' },
+  { id: 'collision', name: 'Collision', icon: '💥', color: '#ff9f0a', desc: 'Unintended contact with workspace obstacles' },
+  { id: 'timeout', name: 'Timeout', icon: '⏰', color: '#ffd60a', desc: 'Task exceeded maximum allowed duration' },
+  { id: 'wrong_target', name: 'Wrong Target', icon: '🎯', color: '#bf5af2', desc: 'Robot manipulated incorrect object' },
+  { id: 'partial', name: 'Partial Complete', icon: '½', color: '#5ac8fa', desc: 'Task partially completed but not finished' },
+  { id: 'planning_error', name: 'Planning Error', icon: '🧠', color: '#2997ff', desc: 'Motion plan was infeasible or suboptimal' },
+  { id: 'perception', name: 'Perception Fail', icon: '👁️', color: '#30d158', desc: 'Vision system misidentified object or pose' },
+  { id: 'hardware', name: 'Hardware Issue', icon: '🔧', color: '#86868b', desc: 'Motor, sensor, or communication failure' },
+];
+
+const SEVERITIES = ['critical', 'major', 'minor', 'cosmetic'];
+const SEV_WEIGHT = { critical: 4, major: 3, minor: 2, cosmetic: 1 };
+
+// Generate realistic failure data
+const FAILURES = [];
+const TASKS = ['pick_red_cube', 'place_on_plate', 'stack_blocks', 'push_to_target', 'pick_and_insert', 'close_drawer'];
+const dates = [];
+for(let d = 0; d < 30; d++) {
+  const date = new Date(2026, 2, d + 1);
+  dates.push(date.toISOString().slice(0, 10));
+}
+
+function generateFailures() {
+  const catWeights = [25, 15, 12, 8, 18, 10, 7, 5]; // frequency weights
+  for(let i = 0; i < 85; i++) {
+    // Weighted random category
+    let r = Math.random() * catWeights.reduce((s,w)=>s+w,0);
+    let catIdx = 0;
+    for(let j = 0; j < catWeights.length; j++) {
+      r -= catWeights[j]; if(r <= 0) { catIdx = j; break; }
+    }
+    const cat = CATEGORIES[catIdx];
+    const sev = SEVERITIES[Math.floor(Math.random() * (catIdx < 2 ? 3 : 4))]; // Earlier cats more severe
+    const task = TASKS[Math.floor(Math.random() * TASKS.length)];
+    const date = dates[Math.floor(Math.random() * dates.length)];
+    const episode = 1000 + Math.floor(Math.random() * 1400);
+    
+    FAILURES.push({
+      id: i,
+      category: cat.id,
+      severity: sev,
+      task,
+      date,
+      episode,
+      description: generateDescription(cat, sev, task),
+      rootCause: generateRootCause(cat),
+      actionItems: generateActions(cat),
+      frame: Math.floor(Math.random() * 300),
+      duration: 5 + Math.random() * 25,
+    });
+  }
+}
+
+function generateDescription(cat, sev, task) {
+  const descs = {
+    grasp_slip: [`Object slipped at ${(Math.random()*20+5).toFixed(0)}cm height during ${task.replace(/_/g,' ')}`, `Gripper lost contact with object during lift phase`, `Object rotated and fell from gripper during transport`],
+    collision: [`Arm collided with table edge during approach`, `Gripper contacted obstacle while repositioning`, `Unexpected contact with adjacent object`],
+    timeout: [`Task exceeded ${(30+Math.random()*30).toFixed(0)}s time limit`, `Robot stalled during search phase`, `Repeated failed attempts exceeded timeout`],
+    wrong_target: [`Picked up blue cube instead of red cube`, `Moved object to wrong location`, `Confused target with similar adjacent object`],
+    partial: [`Grasped object but dropped before placing`, `Reached target zone but misaligned placement`, `Completed approach but failed at final insertion`],
+    planning_error: [`Generated trajectory resulted in joint limit violation`, `Path planner found no valid solution`, `Motion plan had unnecessary detours`],
+    perception: [`Depth estimate off by >3cm for target object`, `Failed to detect object due to lighting`, `Pose estimation error: 15° rotation offset`],
+    hardware: [`Dynamixel servo reported overload error`, `Camera frame dropped during critical phase`, `Communication timeout with gripper controller`],
+  };
+  return descs[cat.id][Math.floor(Math.random() * descs[cat.id].length)];
+}
+
+function generateRootCause(cat) {
+  const causes = {
+    grasp_slip: 'Insufficient grasp force or improper gripper alignment',
+    collision: 'Collision avoidance not accounting for object dynamics',
+    timeout: 'Policy uncertainty leading to exploratory behavior',
+    wrong_target: 'Object classifier confusion on similar-looking objects',
+    partial: 'Success threshold too strict or placement tolerance too tight',
+    planning_error: 'IK solver finding suboptimal solutions in constrained space',
+    perception: 'Lighting variation or occlusion affecting depth estimation',
+    hardware: 'Servo thermal protection triggered or communication bus congestion',
+  };
+  return causes[cat.id];
+}
+
+function generateActions(cat) {
+  const actions = {
+    grasp_slip: ['Increase gripper force for heavy objects', 'Add grasp stability check before lift', 'Retrain grasp pose predictor with slip examples'],
+    collision: ['Add safety margin to collision checker', 'Update workspace model with new obstacles', 'Reduce approach velocity near obstacles'],
+    timeout: ['Increase timeout for complex tasks', 'Add early termination for clearly failing attempts', 'Improve policy confidence calibration'],
+    wrong_target: ['Add color histogram verification step', 'Improve object segmentation model', 'Use language grounding for disambiguation'],
+    partial: ['Relax placement tolerance by 1cm', 'Add recovery behavior for near-misses', 'Fine-tune on partial completion examples'],
+    planning_error: ['Switch to RRTConnect for constrained planning', 'Add joint limit margin of 5°', 'Pre-compute approach waypoints'],
+    perception: ['Add adaptive exposure control', 'Use multi-view fusion for depth', 'Retrain detector on challenging lighting'],
+    hardware: ['Implement servo temperature monitoring', 'Add communication retry logic', 'Schedule preventive maintenance'],
+  };
+  return actions[cat.id];
+}
+
+generateFailures();
+
+/* ═══ State ═══ */
+let activeCategory = 'all';
+let activeSeverity = 'all';
+let sortMode = 'recent';
+let charts = {};
+
+/* ═══ Rendering ═══ */
+function render() {
+  renderCategories();
+  renderSummary();
+  renderCharts();
+  renderFailures();
+}
+
+function renderCategories() {
+  const counts = {};
+  CATEGORIES.forEach(c => counts[c.id] = FAILURES.filter(f => f.category === c.id).length);
+  
+  document.getElementById('categoryList').innerHTML = 
+    `<button class="cat-btn ${activeCategory === 'all' ? 'active' : ''}" onclick="filterCategory('all')">
+      <div class="cat-icon" style="background:rgba(255,255,255,.06)">📊</div>
+      All Failures
+      <span class="cat-count">${FAILURES.length}</span>
+    </button>` +
+    CATEGORIES.map(c => `
+      <button class="cat-btn ${activeCategory === c.id ? 'active' : ''}" onclick="filterCategory('${c.id}')">
+        <div class="cat-icon" style="background:${c.color}22">${c.icon}</div>
+        ${c.name}
+        <span class="cat-count">${counts[c.id]}</span>
+      </button>
+    `).join('');
+}
+
+function renderSummary() {
+  const filtered = getFiltered();
+  const critCount = filtered.filter(f => f.severity === 'critical').length;
+  const topCat = CATEGORIES.reduce((best, c) => {
+    const cnt = filtered.filter(f => f.category === c.id).length;
+    return cnt > best.count ? { cat: c, count: cnt } : best;
+  }, { cat: null, count: 0 });
+  
+  const recentWeek = filtered.filter(f => {
+    const d = new Date(f.date);
+    return (new Date('2026-03-17') - d) < 7 * 86400000;
+  }).length;
+  
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="summary-card"><div class="summary-value" style="color:var(--red)">${filtered.length}</div><div class="summary-label">Total Failures</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--orange)">${critCount}</div><div class="summary-label">Critical</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--accent)">${topCat.cat ? topCat.cat.icon : '—'} ${topCat.count}</div><div class="summary-label">Top: ${topCat.cat?.name || '—'}</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--yellow)">${recentWeek}</div><div class="summary-label">Last 7 Days</div></div>
+  `;
+}
+
+function renderCharts() {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  
+  const filtered = getFiltered();
+  
+  document.getElementById('chartsRow').innerHTML = `
+    <div class="chart-panel"><div class="chart-title">Distribution by Category</div><div class="chart-container"><canvas id="chartDist"></canvas></div></div>
+    <div class="chart-panel"><div class="chart-title">Trend Over Time</div><div class="chart-container"><canvas id="chartTrend"></canvas></div></div>
+  `;
+  
+  // Distribution
+  const catCounts = CATEGORIES.map(c => filtered.filter(f => f.category === c.id).length);
+  charts.dist = new Chart(document.getElementById('chartDist'), {
+    type: 'doughnut',
+    data: {
+      labels: CATEGORIES.map(c => c.name),
+      datasets: [{ data: catCounts, backgroundColor: CATEGORIES.map(c => c.color + 'aa'), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, padding: 6, font: { size: 10 } } } },
+      cutout: '55%'
+    }
+  });
+  
+  // Trend
+  const uniqueDates = [...new Set(filtered.map(f => f.date))].sort();
+  const recentDates = uniqueDates.slice(-14);
+  const dateCounts = recentDates.map(d => filtered.filter(f => f.date === d).length);
+  const critCounts = recentDates.map(d => filtered.filter(f => f.date === d && f.severity === 'critical').length);
+  
+  charts.trend = new Chart(document.getElementById('chartTrend'), {
+    type: 'bar',
+    data: {
+      labels: recentDates.map(d => d.slice(5)),
+      datasets: [
+        { label: 'All', data: dateCounts, backgroundColor: 'rgba(41,151,255,.4)', borderColor: '#2997ff', borderWidth: 1, borderRadius: 3 },
+        { label: 'Critical', data: critCounts, backgroundColor: 'rgba(255,69,58,.6)', borderColor: '#ff453a', borderWidth: 1, borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 10 } } },
+      scales: { x: { ticks: { font: { size: 9 } } }, y: { beginAtZero: true } }
+    }
+  });
+}
+
+function renderFailures() {
+  let filtered = getFiltered();
+  
+  // Sort
+  if(sortMode === 'recent') filtered.sort((a, b) => b.date.localeCompare(a.date) || b.episode - a.episode);
+  else if(sortMode === 'severity') filtered.sort((a, b) => SEV_WEIGHT[b.severity] - SEV_WEIGHT[a.severity]);
+  else if(sortMode === 'frequency') {
+    const catCounts = {};
+    filtered.forEach(f => catCounts[f.category] = (catCounts[f.category] || 0) + 1);
+    filtered.sort((a, b) => catCounts[b.category] - catCounts[a.category]);
+  }
+  
+  document.getElementById('failureGrid').innerHTML = filtered.map(f => {
+    const cat = CATEGORIES.find(c => c.id === f.category);
+    return `<div class="failure-card" onclick="showDetail(${f.id})">
+      <div class="failure-thumb">
+        <canvas id="thumb-${f.id}" width="280" height="120"></canvas>
+        <span class="sev-badge sev-${f.severity}">${f.severity}</span>
+      </div>
+      <div class="failure-body">
+        <h4>${cat.icon} ${cat.name}</h4>
+        <div class="fail-meta">
+          <span>📅 ${f.date}</span>
+          <span>🎬 ep${f.episode}</span>
+          <span>⏱ ${f.duration.toFixed(1)}s</span>
+        </div>
+        <div class="fail-desc">${f.description}</div>
+        <div class="fail-tags">
+          <span class="fail-tag">${f.task.replace(/_/g,' ')}</span>
+          <span class="fail-tag">frame ${f.frame}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  
+  // Draw thumbnails
+  filtered.forEach(f => {
+    const cv = document.getElementById(`thumb-${f.id}`);
+    if(cv) drawFailureThumbnail(cv, f);
+  });
+}
+
+function drawFailureThumbnail(cv, f) {
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const cat = CATEGORIES.find(c => c.id === f.category);
+  
+  // Dark workspace bg
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, w, h);
+  
+  // Table
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, h * 0.6, w, h * 0.4);
+  
+  // Seed RNG from failure id
+  let seed = f.id * 137 + f.frame;
+  const rng = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  
+  // Object
+  ctx.fillStyle = cat.color + '88';
+  const ox = 80 + rng() * 120, oy = h * 0.5 + rng() * 20;
+  ctx.beginPath(); ctx.arc(ox, oy, 12, 0, Math.PI * 2); ctx.fill();
+  
+  // Simple robot arm
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  const ax = 140 + rng() * 40, ay = 10;
+  const jx = ax - 20 + rng() * 40, jy = 40 + rng() * 20;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(jx, jy); ctx.lineTo(ox + (rng()-.5)*30, oy - 15); ctx.stroke();
+  
+  // Failure indicator
+  ctx.strokeStyle = cat.color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.arc(ox, oy, 20, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // Failure icon overlay
+  ctx.font = '20px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(cat.icon, ox, oy + 35);
+}
+
+function getFiltered() {
+  return FAILURES.filter(f => {
+    if(activeCategory !== 'all' && f.category !== activeCategory) return false;
+    if(activeSeverity !== 'all' && f.severity !== activeSeverity) return false;
+    return true;
+  });
+}
+
+/* ═══ Filters ═══ */
+function filterCategory(cat) {
+  activeCategory = cat;
+  render();
+}
+
+function filterSeverity(sev) {
+  activeSeverity = sev;
+  document.querySelectorAll('[data-sev]').forEach(b => b.classList.toggle('active', b.dataset.sev === sev));
+  render();
+}
+
+function sortBy(mode) {
+  sortMode = mode;
+  document.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  renderFailures();
+}
+
+/* ═══ Detail Modal ═══ */
+function showDetail(id) {
+  const f = FAILURES.find(f => f.id === id);
+  if(!f) return;
+  const cat = CATEGORIES.find(c => c.id === f.category);
+  
+  document.getElementById('modalTitle').textContent = `${cat.icon} ${cat.name} — Episode ${f.episode}`;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-section">
+      <div class="detail-label">Description</div>
+      <div class="detail-value">${f.description}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Category</div>
+      <div class="detail-value">${cat.icon} ${cat.name} — ${cat.desc}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Metadata</div>
+      <div class="detail-value">
+        <strong>Task:</strong> ${f.task.replace(/_/g,' ')}<br>
+        <strong>Date:</strong> ${f.date}<br>
+        <strong>Episode:</strong> ${f.episode}<br>
+        <strong>Frame:</strong> ${f.frame}<br>
+        <strong>Duration:</strong> ${f.duration.toFixed(1)}s<br>
+        <strong>Severity:</strong> <span class="sev-badge sev-${f.severity}" style="display:inline-block">${f.severity}</span>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Root Cause Analysis</div>
+      <div class="detail-value">${f.rootCause}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Recommended Actions</div>
+      <ul class="action-items">
+        ${f.actionItems.map(a => `<li>${a}</li>`).join('')}
+      </ul>
+    </div>
+  `;
+  document.getElementById('detailModal').classList.remove('hidden');
+}
+
+/* ═══ Export ═══ */
+function exportReport() {
+  const filtered = getFiltered();
+  const report = {
+    generated: new Date().toISOString(),
+    filter: { category: activeCategory, severity: activeSeverity },
+    summary: {
+      total: filtered.length,
+      critical: filtered.filter(f => f.severity === 'critical').length,
+      major: filtered.filter(f => f.severity === 'major').length,
+      minor: filtered.filter(f => f.severity === 'minor').length,
+    },
+    by_category: CATEGORIES.map(c => ({
+      category: c.name,
+      count: filtered.filter(f => f.category === c.id).length,
+      root_cause: c.desc,
+    })),
+    failures: filtered.map(f => ({
+      category: f.category, severity: f.severity, task: f.task,
+      date: f.date, episode: f.episode, description: f.description,
+      root_cause: f.rootCause, actions: f.actionItems,
+    }))
+  };
+  
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'failure-atlas-report.json';
+  a.click();
+}
+
+function addFailure() {
+  alert('In production, this would open a form to log a new failure with video timestamp, category, severity, and notes. For this demo, failures are pre-generated.');
+}
+
+/* ═══ Init ═══ */
+render();
+</script>
+</body>
+</html>

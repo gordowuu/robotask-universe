@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeCheck — Fast Robot Video Triage</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #080810;
+      --surf:    #0e0e18;
+      --surf2:   #14141f;
+      --surf3:   #1a1a28;
+      --border:  #1e1e30;
+      --border2: #252538;
+      --text:    #e8e8f4;
+      --muted:   #55556a;
+      --radius:  12px;
+
+      /* Vibe colors */
+      --v1-c: #f05252; --v1-bg: rgba(240,82,82,0.12); --v1-border: rgba(240,82,82,0.3);
+      --v2-c: #f59e0b; --v2-bg: rgba(245,158,11,0.12); --v2-border: rgba(245,158,11,0.3);
+      --v3-c: #6b7280; --v3-bg: rgba(107,114,128,0.12); --v3-border: rgba(107,114,128,0.3);
+      --v4-c: #34d399; --v4-bg: rgba(52,211,153,0.12); --v4-border: rgba(52,211,153,0.3);
+      --v5-c: #a78bfa; --v5-bg: rgba(167,139,250,0.12); --v5-border: rgba(167,139,250,0.3);
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(8,8,16,0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 11px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo-vibe { color: #a78bfa; }
+    .logo-check { color: #fff; }
+    .session-meta { font-size: 11px; color: var(--muted); }
+    .header-spacer { flex: 1; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .hdr-btn {
+      background: var(--surf2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 5px 13px;
+      border-radius: 7px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .hdr-btn:hover { border-color: #3a3a55; background: var(--surf3); }
+    .hdr-btn.accent { background: #3d2890; border-color: #5533cc; color: #c4b5fd; }
+    .hdr-btn.accent:hover { background: #4a3099; }
+
+    /* ── Progress ── */
+    .progress-wrap {
+      background: var(--surf);
+      border-bottom: 1px solid var(--border);
+    }
+    .progress-track {
+      height: 2px;
+      background: var(--border);
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    }
+    .progress-info {
+      padding: 6px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .progress-counts { display: flex; gap: 14px; }
+    .progress-count { display: flex; align-items: center; gap: 4px; }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 24px;
+      gap: 20px;
+    }
+
+    /* ── Video card ── */
+    .video-card {
+      width: 100%;
+      max-width: 880px;
+      background: var(--surf);
+      border: 1px solid var(--border2);
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      transition: border-color 0.3s;
+    }
+    .video-card.vibe-1 { border-color: var(--v1-border); box-shadow: 0 0 40px rgba(240,82,82,0.08); }
+    .video-card.vibe-2 { border-color: var(--v2-border); box-shadow: 0 0 40px rgba(245,158,11,0.08); }
+    .video-card.vibe-3 { border-color: var(--v3-border); }
+    .video-card.vibe-4 { border-color: var(--v4-border); box-shadow: 0 0 40px rgba(52,211,153,0.08); }
+    .video-card.vibe-5 { border-color: var(--v5-border); box-shadow: 0 0 40px rgba(167,139,250,0.12); }
+
+    .video-wrapper {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      position: relative;
+    }
+    #main-video {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Big vibe flash overlay */
+    .vibe-flash {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 120px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.1s;
+    }
+    .vibe-flash.show {
+      opacity: 1;
+      animation: flash-fade 0.5s ease-out forwards;
+    }
+    @keyframes flash-fade {
+      0%   { opacity: 1; transform: scale(0.8); }
+      30%  { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 0; transform: scale(1.4); }
+    }
+
+    /* Video footer */
+    .video-card-footer {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .vid-label { font-size: 13px; font-weight: 600; color: #fff; }
+    .vid-task  { font-size: 12px; color: var(--muted); }
+    .vid-spacer { flex: 1; }
+    .vid-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Vibe buttons ── */
+    .vibe-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 880px;
+    }
+
+    .vibe-btn {
+      flex: 1;
+      min-width: 100px;
+      max-width: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 16px 12px 14px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1);
+      border: 1.5px solid var(--border2);
+      background: var(--surf);
+      position: relative;
+      overflow: hidden;
+    }
+    .vibe-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .vibe-btn:hover { transform: translateY(-4px) scale(1.03); }
+    .vibe-btn:active { transform: translateY(-1px) scale(0.98); }
+
+    .vibe-btn[data-vibe="1"] { border-color: var(--v1-border); }
+    .vibe-btn[data-vibe="1"]::before { background: var(--v1-bg); }
+    .vibe-btn[data-vibe="1"]:hover::before { opacity: 1; }
+    .vibe-btn[data-vibe="1"]:hover { box-shadow: 0 8px 32px rgba(240,82,82,0.2); }
+
+    .vibe-btn[data-vibe="2"] { border-color: var(--v2-border); }
+    .vibe-btn[data-vibe="2"]::before { background: var(--v2-bg); }
+    .vibe-btn[data-vibe="2"]:hover::before { opacity: 1; }
+    .vibe-btn[data-vibe="2"]:hover { box-shadow: 0 8px 32px rgba(245,158,11,0.18); }
+
+    .vibe-btn[data-vibe="3"] { border-color: var(--v3-border); }
+    .vibe-btn[data-vibe="3"]::before { background: var(--v3-bg); }
+    .vibe-btn[data-vibe="3"]:hover::before { opacity: 1; }
+
+    .vibe-btn[data-vibe="4"] { border-color: var(--v4-border); }
+    .vibe-btn[data-vibe="4"]::before { background: var(--v4-bg); }
+    .vibe-btn[data-vibe="4"]:hover::before { opacity: 1; }
+    .vibe-btn[data-vibe="4"]:hover { box-shadow: 0 8px 32px rgba(52,211,153,0.18); }
+
+    .vibe-btn[data-vibe="5"] { border-color: var(--v5-border); }
+    .vibe-btn[data-vibe="5"]::before { background: var(--v5-bg); }
+    .vibe-btn[data-vibe="5"]:hover::before { opacity: 1; }
+    .vibe-btn[data-vibe="5"]:hover { box-shadow: 0 8px 32px rgba(167,139,250,0.22); }
+
+    .vibe-emoji { font-size: 36px; line-height: 1; position: relative; z-index: 1; }
+    .vibe-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      position: relative; z-index: 1;
+    }
+    .vibe-btn[data-vibe="1"] .vibe-label { color: var(--v1-c); }
+    .vibe-btn[data-vibe="2"] .vibe-label { color: var(--v2-c); }
+    .vibe-btn[data-vibe="4"] .vibe-label { color: var(--v4-c); }
+    .vibe-btn[data-vibe="5"] .vibe-label { color: var(--v5-c); }
+
+    .vibe-key {
+      font-size: 10px;
+      padding: 1px 6px;
+      background: var(--surf3);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: #444;
+      position: relative; z-index: 1;
+    }
+
+    /* ── Playback mini-bar ── */
+    .playback-mini {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      max-width: 880px;
+      width: 100%;
+    }
+    .mini-btn {
+      background: var(--surf2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .mini-btn:hover { background: var(--surf3); }
+    .mini-btn.active { background: #3d2890; border-color: #5533cc; color: #c4b5fd; }
+    .speed-group { display: flex; gap: 3px; }
+    .skip-btn {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      padding: 5px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .skip-btn:hover { color: var(--text); }
+
+    /* ── Scrubber (mini) ── */
+    .scrubber-wrap {
+      max-width: 880px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .scr-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
+    #scrubber {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--border2);
+      outline: none;
+      cursor: pointer;
+    }
+    #scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #7c6cfc;
+      border: 2px solid var(--bg);
+      cursor: pointer;
+    }
+
+    /* ── Results overlay ── */
+    .overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .overlay.open { opacity: 1; pointer-events: all; }
+
+    .results-modal {
+      background: var(--surf);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 720px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 28px;
+      transform: translateY(16px);
+      transition: transform 0.2s;
+    }
+    .overlay.open .results-modal { transform: translateY(0); }
+
+    .modal-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .modal-hdr h2 { font-size: 18px; font-weight: 700; }
+    .modal-close {
+      background: var(--surf2); border: 1px solid var(--border2);
+      color: var(--text); width: 30px; height: 30px;
+      border-radius: 7px; font-size: 14px; cursor: pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+
+    /* Vibe distribution bars */
+    .vibe-bar-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px;
+    }
+    .vibe-bar-label { font-size: 18px; min-width: 28px; }
+    .vibe-bar-name { font-size: 12px; color: var(--muted); min-width: 80px; }
+    .vibe-bar-track { flex: 1; height: 10px; background: var(--border2); border-radius: 5px; overflow: hidden; }
+    .vibe-bar-fill { height: 100%; border-radius: 5px; transition: width 0.6s ease; }
+    .vibe-bar-count { font-size: 12px; font-weight: 700; min-width: 28px; text-align: right; }
+
+    /* Per-video results table */
+    .results-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
+    .results-table th {
+      text-align: left; padding: 7px 10px;
+      color: var(--muted); font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border);
+    }
+    .results-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table tr:hover td { background: var(--surf2); }
+
+    /* Done screen */
+    .done-screen {
+      display: flex; flex-direction: column;
+      align-items: center; text-align: center;
+      gap: 14px; padding: 20px;
+      max-width: 500px;
+    }
+    .done-emoji-row { display: flex; gap: 6px; font-size: 40px; }
+    .done-screen h2 { font-size: 22px; font-weight: 800; }
+    .done-screen p { font-size: 14px; color: var(--muted); }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surf2); border: 1px solid #3d2890;
+      border-radius: 10px; padding: 10px 16px;
+      font-size: 13px; z-index: 200;
+      opacity: 0; transform: translateY(8px);
+      transition: all 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 600px) {
+      header { padding: 10px 14px; }
+      main { padding: 14px; gap: 12px; }
+      .vibe-btn { padding: 12px 8px 10px; min-width: 64px; }
+      .vibe-emoji { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-vibe">Vibe</span><span class="logo-check">Check</span></div>
+  <div class="session-meta" id="session-meta">Loading…</div>
+  <div class="header-spacer"></div>
+  <div class="header-actions">
+    <button class="hdr-btn" onclick="openResults()">📊 Results</button>
+    <button class="hdr-btn" onclick="exportCSV()">⬇ CSV</button>
+    <button class="hdr-btn accent" onclick="undoLast()" id="undo-btn" style="display:none">↩ Undo</button>
+  </div>
+</header>
+
+<div class="progress-wrap">
+  <div class="progress-track">
+    <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+  </div>
+  <div class="progress-info">
+    <span id="progress-text">0 / 0 rated</span>
+    <div class="progress-counts" id="vibe-counts"></div>
+  </div>
+</div>
+
+<main id="main-area">
+
+  <!-- Video card -->
+  <div class="video-card" id="video-card">
+    <div class="video-wrapper">
+      <video id="main-video" playsinline loop muted></video>
+      <div class="vibe-flash" id="vibe-flash"></div>
+    </div>
+    <div class="video-card-footer">
+      <div>
+        <div class="vid-label" id="vid-label">Loading…</div>
+        <div class="vid-task" id="vid-task">—</div>
+      </div>
+      <div class="vid-spacer"></div>
+      <div class="vid-time" id="vid-time">0:00</div>
+    </div>
+  </div>
+
+  <!-- Scrubber -->
+  <div class="scrubber-wrap">
+    <span class="scr-time" id="scr-cur">0:00</span>
+    <input type="range" id="scrubber" min="0" max="100" step="0.1" value="0">
+    <span class="scr-time" id="scr-dur">0:00</span>
+  </div>
+
+  <!-- Playback bar -->
+  <div class="playback-mini">
+    <button class="mini-btn" onclick="togglePlay()" id="play-btn">▶</button>
+    <div class="speed-group">
+      <button class="mini-btn speed-btn" onclick="setSpeed(0.5)">½×</button>
+      <button class="mini-btn speed-btn active" onclick="setSpeed(1)">1×</button>
+      <button class="mini-btn speed-btn" onclick="setSpeed(2)">2×</button>
+    </div>
+    <button class="skip-btn" onclick="skipVideo()">Skip →</button>
+  </div>
+
+  <!-- Vibe buttons -->
+  <div class="vibe-row" id="vibe-row"></div>
+
+</main>
+
+<!-- Results overlay -->
+<div class="overlay" id="overlay" onclick="closeResultsIfBg(event)">
+  <div class="results-modal">
+    <div class="modal-hdr">
+      <h2>📊 VibeCheck Results</h2>
+      <button class="modal-close" onclick="closeResults()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════
+     CONFIGURATION — edit this section
+     ════════════════════════════════════════════════ -->
+<script>
+  const SESSION_NAME = 'vibe-session-1';   // CHANGE: session name
+  const EVALUATOR    = 'evaluator-1';       // CHANGE: your name
+
+  // Videos to label — Replace with your own video URLs
+  const VIDEOS = [
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',                 label: 'Original Demo',     task: 'Pick and place — baseline' },
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4', label: 'Cosmos Gen v1',     task: 'Pick and place — aug run 1' },
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',          label: 'Cosmos Gen v2',     task: 'Pick and place — aug run 2' },
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',          label: 'Cosmos Gen v3',     task: 'Pick and place — aug run 3' },
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',    label: 'Cosmos Gen v4',     task: 'Pick and place — aug run 4' },
+    { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',                 label: 'Cosmos Gen v5',     task: 'Pick and place — aug run 5' },
+  ];
+
+  // Vibe labels (5 fixed levels — customizable emojis/labels)
+  const VIBES = [
+    { id: 1, emoji: '💀', label: 'Fail',     key: '1', color: '#f05252' },
+    { id: 2, emoji: '🤔', label: 'Marginal', key: '2', color: '#f59e0b' },
+    { id: 3, emoji: '😐', label: 'OK',       key: '3', color: '#6b7280' },
+    { id: 4, emoji: '👍', label: 'Good',     key: '4', color: '#34d399' },
+    { id: 5, emoji: '🔥', label: 'Perfect',  key: '5', color: '#a78bfa' },
+  ];
+</script>
+<!-- ════════════════════════════════════════════════ -->
+
+<script>
+  // ── State ──
+  const STORAGE_KEY = `vibe-check:${SESSION_NAME}`;
+  let labels  = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  let curIdx  = 0;
+  let curSpeed = 1;
+  let scrubDragging = false;
+
+  // ── DOM ──
+  const video    = document.getElementById('main-video');
+  const playBtn  = document.getElementById('play-btn');
+  const vidLabel = document.getElementById('vid-label');
+  const vidTask  = document.getElementById('vid-task');
+  const vidTime  = document.getElementById('vid-time');
+  const scrubber = document.getElementById('scrubber');
+  const scrCur   = document.getElementById('scr-cur');
+  const scrDur   = document.getElementById('scr-dur');
+  const flash    = document.getElementById('vibe-flash');
+  const videoCard= document.getElementById('video-card');
+  const progFill = document.getElementById('progress-fill');
+  const progText = document.getElementById('progress-text');
+
+  // ── Session meta ──
+  document.getElementById('session-meta').textContent = `${SESSION_NAME} · ${EVALUATOR}`;
+
+  // ── Build vibe buttons ──
+  const vibeRow = document.getElementById('vibe-row');
+  VIBES.forEach(v => {
+    const btn = document.createElement('div');
+    btn.className = 'vibe-btn';
+    btn.dataset.vibe = v.id;
+    btn.setAttribute('role', 'button');
+    btn.setAttribute('aria-label', `${v.label} (key ${v.key})`);
+    btn.innerHTML = `
+      <span class="vibe-emoji">${v.emoji}</span>
+      <span class="vibe-label">${v.label}</span>
+      <span class="vibe-key">${v.key}</span>
+    `;
+    btn.onclick = () => submitVibe(v.id);
+    vibeRow.appendChild(btn);
+  });
+
+  // ── Load video ──
+  function fmtTime(s) {
+    return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
+  }
+
+  function loadVideo(idx) {
+    if (idx >= VIDEOS.length) { showDone(); return; }
+    const v = VIDEOS[idx];
+    video.src = v.file;
+    video.load();
+    video.play().catch(()=>{});
+    video.playbackRate = curSpeed;
+    vidLabel.textContent = v.label;
+    vidTask.textContent  = v.task;
+    videoCard.className  = 'video-card';
+    updateProgress();
+  }
+
+  // Skip already-labeled videos
+  const labeledFiles = new Set(labels.map(l => l.file));
+  while (curIdx < VIDEOS.length && labeledFiles.has(VIDEOS[curIdx].file)) curIdx++;
+  loadVideo(curIdx);
+
+  // ── Time / scrubber ──
+  setInterval(() => {
+    if (!video.duration) return;
+    const t = video.currentTime;
+    const d = video.duration;
+    vidTime.textContent = fmtTime(t);
+    scrCur.textContent  = fmtTime(t);
+    if (!scrubDragging) {
+      scrubber.max   = d;
+      scrubber.value = t;
+      scrDur.textContent = fmtTime(d);
+    }
+  }, 150);
+
+  scrubber.addEventListener('mousedown', () => { scrubDragging = true; });
+  scrubber.addEventListener('touchstart', () => { scrubDragging = true; }, {passive:true});
+  scrubber.addEventListener('input', () => { scrCur.textContent = fmtTime(parseFloat(scrubber.value)); });
+  scrubber.addEventListener('change', () => { video.currentTime = parseFloat(scrubber.value); scrubDragging = false; });
+  scrubber.addEventListener('mouseup', () => { video.currentTime = parseFloat(scrubber.value); scrubDragging = false; });
+
+  video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
+  video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
+
+  // ── Playback ──
+  function togglePlay() { video.paused ? video.play() : video.pause(); }
+
+  const speedBtns = document.querySelectorAll('.speed-btn');
+  const speedVals = [0.5, 1, 2];
+  function setSpeed(s) {
+    curSpeed = s;
+    video.playbackRate = s;
+    speedBtns.forEach((b, i) => b.classList.toggle('active', speedVals[i] === s));
+  }
+
+  // ── Submit vibe ──
+  function submitVibe(vibeId) {
+    if (curIdx >= VIDEOS.length) return;
+    const v = VIDEOS[curIdx];
+    const vibe = VIBES.find(x => x.id === vibeId);
+    const entry = {
+      session: SESSION_NAME,
+      evaluator: EVALUATOR,
+      file: v.file,
+      label: v.label,
+      task: v.task,
+      vibe_id: vibeId,
+      vibe_label: vibe.label,
+      vibe_emoji: vibe.emoji,
+      timestamp: new Date().toISOString(),
+    };
+    labels.push(entry);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(labels));
+
+    // Flash feedback
+    flash.textContent = vibe.emoji;
+    flash.classList.add('show');
+    setTimeout(() => flash.classList.remove('show'), 600);
+
+    // Color the card
+    videoCard.className = `video-card vibe-${vibeId}`;
+
+    // Show undo button
+    document.getElementById('undo-btn').style.display = '';
+
+    showToast(`${vibe.emoji} ${vibe.label} — moving on`);
+    updateProgress();
+
+    // Auto-advance after flash
+    setTimeout(() => {
+      curIdx++;
+      loadVideo(curIdx);
+    }, 350);
+  }
+
+  function skipVideo() {
+    curIdx++;
+    loadVideo(curIdx);
+    showToast('Skipped');
+  }
+
+  // ── Undo ──
+  function undoLast() {
+    if (labels.length === 0) return;
+    const last = labels.pop();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(labels));
+    // Go back to that video
+    curIdx = VIDEOS.findIndex(v => v.file === last.file);
+    loadVideo(curIdx);
+    updateProgress();
+    showToast(`↩ Undid: ${last.vibe_emoji} on ${last.label}`);
+    if (labels.length === 0) document.getElementById('undo-btn').style.display = 'none';
+  }
+
+  // ── Progress ──
+  function updateProgress() {
+    const total = VIDEOS.length;
+    const done  = labels.length;
+    progFill.style.width = (done / total * 100) + '%';
+    progText.textContent = `${done} / ${total} labeled`;
+
+    // Vibe counts
+    const counts = document.getElementById('vibe-counts');
+    counts.innerHTML = '';
+    VIBES.forEach(v => {
+      const n = labels.filter(l => l.vibe_id === v.id).length;
+      if (n === 0) return;
+      const span = document.createElement('span');
+      span.className = 'progress-count';
+      span.innerHTML = `<span>${v.emoji}</span><span style="font-variant-numeric:tabular-nums">${n}</span>`;
+      counts.appendChild(span);
+    });
+  }
+  updateProgress();
+
+  // ── Done screen ──
+  function showDone() {
+    const main = document.getElementById('main-area');
+    main.innerHTML = `
+      <div class="done-screen">
+        <div class="done-emoji-row">🎉✅🔥</div>
+        <h2>All videos labeled!</h2>
+        <p>${labels.length} labels saved for session <strong>${SESSION_NAME}</strong>.</p>
+        <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+          <button class="hdr-btn accent" onclick="openResults()" style="padding:10px 20px;font-size:14px;font-weight:600">📊 View Results</button>
+          <button class="hdr-btn" onclick="exportCSV()" style="padding:10px 20px;font-size:14px">⬇ Export CSV</button>
+        </div>
+      </div>
+    `;
+    progFill.style.width = '100%';
+  }
+
+  // ── Results modal ──
+  function openResults() {
+    if (labels.length === 0) { showToast('No labels yet!'); return; }
+    const body = document.getElementById('modal-body');
+
+    // Vibe distribution
+    const total = labels.length;
+    let distHTML = '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Vibe Distribution</div>';
+    VIBES.forEach(v => {
+      const n = labels.filter(l => l.vibe_id === v.id).length;
+      const pct = total > 0 ? (n / total * 100) : 0;
+      distHTML += `
+        <div class="vibe-bar-row">
+          <span class="vibe-bar-label">${v.emoji}</span>
+          <span class="vibe-bar-name">${v.label}</span>
+          <div class="vibe-bar-track">
+            <div class="vibe-bar-fill" style="width:${pct}%;background:${v.color}"></div>
+          </div>
+          <span class="vibe-bar-count" style="color:${v.color}">${n}</span>
+        </div>`;
+    });
+
+    // Table
+    const rows = labels.map(l => `
+      <tr>
+        <td style="font-weight:600">${l.label}</td>
+        <td style="font-size:11px;color:var(--muted)">${l.task}</td>
+        <td style="font-size:20px">${l.vibe_emoji}</td>
+        <td style="color:${VIBES.find(v=>v.id===l.vibe_id)?.color || '#fff'};font-weight:600">${l.vibe_label}</td>
+        <td style="font-size:10px;color:var(--muted)">${new Date(l.timestamp).toLocaleTimeString()}</td>
+      </tr>`).join('');
+
+    body.innerHTML = `
+      ${distHTML}
+      <div style="margin-top:20px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Per-Video Labels</div>
+      <div style="overflow-x:auto">
+        <table class="results-table">
+          <thead><tr><th>Video</th><th>Task</th><th>Vibe</th><th>Label</th><th>Time</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:18px;display:flex;gap:8px">
+        <button class="hdr-btn accent" onclick="exportCSV()" style="padding:8px 18px">⬇ Export CSV</button>
+        <button class="hdr-btn" onclick="clearAll()" style="padding:8px 18px">🗑 Clear</button>
+      </div>
+    `;
+    document.getElementById('overlay').classList.add('open');
+  }
+
+  function closeResults() { document.getElementById('overlay').classList.remove('open'); }
+  function closeResultsIfBg(e) { if (e.target === document.getElementById('overlay')) closeResults(); }
+
+  // ── CSV export ──
+  function exportCSV() {
+    if (labels.length === 0) { showToast('Nothing to export!'); return; }
+    const cols = ['session','evaluator','file','label','task','vibe_id','vibe_label','vibe_emoji','timestamp'];
+    const rows = labels.map(l => cols.map(c => JSON.stringify(l[c] ?? '')).join(','));
+    const csv = [cols.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${SESSION_NAME}-vibecheck.csv` });
+    a.click(); URL.revokeObjectURL(a.href);
+    showToast(`Exported ${labels.length} labels`);
+  }
+
+  function clearAll() {
+    if (!confirm(`Delete all ${labels.length} labels for "${SESSION_NAME}"?`)) return;
+    labels = [];
+    localStorage.removeItem(STORAGE_KEY);
+    closeResults();
+    curIdx = 0;
+    loadVideo(0);
+    updateProgress();
+    document.getElementById('undo-btn').style.display = 'none';
+    showToast('Cleared!');
+  }
+
+  // ── Toast ──
+  let toastT;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  // ── Keyboard shortcuts ──
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    const k = e.key;
+    const vibeByKey = VIBES.find(v => v.key === k);
+    if (vibeByKey) { submitVibe(vibeByKey.id); return; }
+    switch (k) {
+      case ' ':
+        e.preventDefault();
+        togglePlay();
+        break;
+      case 'r': case 'R':
+        video.currentTime = 0;
+        video.play();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 3);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration||999, video.currentTime + 3);
+        break;
+      case 'z': case 'Z':
+        if (e.metaKey || e.ctrlKey) { e.preventDefault(); undoLast(); }
+        break;
+      case 's': case 'S':
+        skipVideo();
+        break;
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeCheck v2 — Fast Robot Video Triage</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #08080f; --surf: #0e0e1a; --surf2: #141420; --surf3: #1a1a28;
+      --border: #1e1e32; --brd2: #252540; --text: #e4e4f0; --muted: #555568;
+      --accent: #7c6cfc; --green: #22c55e; --amber: #fbbf24; --red: #ef4444; --r: 10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      background: rgba(8,8,15,0.96); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 11px 24px; display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .logo-v { color: var(--accent); }
+    .logo-c { color: #fff; }
+    .logo-sup { font-size: 10px; background: var(--accent); color: #fff; padding: 1px 4px; border-radius: 3px; vertical-align: super; }
+    .header-spacer { flex: 1; }
+
+    /* Progress */
+    .progress-track { background: var(--surf); border-bottom: 1px solid var(--border); height: 3px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a78bfa); transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+    .progress-info { padding: 5px 24px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); background: var(--surf); border-bottom: 1px solid var(--border); }
+    .vibe-counts { display: flex; gap: 12px; }
+
+    main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 16px; }
+
+    /* ── Video card ── */
+    .video-card {
+      width: 100%; max-width: 820px;
+      background: var(--surf); border: 1px solid var(--brd2);
+      border-radius: 14px; overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .video-wrap { aspect-ratio: 16/9; background: #000; position: relative; }
+    .video-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .vibe-flash { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 100px; opacity: 0; pointer-events: none; }
+    .vibe-flash.show { animation: flash 0.55s ease-out forwards; }
+    @keyframes flash { 0%{opacity:1;transform:scale(0.6)} 30%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(1.5)} }
+    .vid-footer { padding: 9px 14px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); }
+    .vid-label { font-size: 13px; font-weight: 600; color: #fff; }
+    .vid-task  { font-size: 11px; color: var(--muted); }
+    .vid-spacer { flex: 1; }
+    .vid-time  { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Scrubber + pb ── */
+    .ctrl-bar { width: 100%; max-width: 820px; background: var(--surf); border: 1px solid var(--brd2); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .scr-row { display: flex; align-items: center; gap: 8px; }
+    .scr-t { font-size: 11px; color: var(--muted); min-width: 32px; font-variant-numeric: tabular-nums; }
+    input[type=range].vid-scr { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer; background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct,0%), var(--brd2) var(--pct,0%), var(--brd2) 100%); }
+    input[type=range].vid-scr::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+    .pb-row { display: flex; gap: 5px; align-items: center; }
+    .pb-btn { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.1s; }
+    .pb-btn:hover { background: var(--surf3); }
+    .pb-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pb-spacer { flex: 1; }
+    .skip-btn { background: transparent; border: 1px solid var(--brd2); color: var(--muted); padding: 4px 11px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .skip-btn:hover { color: var(--text); }
+
+    /* ── Optional note field ── */
+    .note-row { width: 100%; max-width: 820px; }
+    .note-field { width: 100%; background: var(--surf2); border: 1px solid var(--brd2); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 13px; padding: 8px 12px; outline: none; resize: none; min-height: 48px; transition: border-color 0.15s; }
+    .note-field:focus { border-color: var(--accent); }
+    .note-field::placeholder { color: var(--muted); }
+
+    /* ── Vibe buttons ── */
+    .vibe-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; width: 100%; max-width: 820px; }
+    .vibe-btn {
+      flex: 1; min-width: 90px; max-width: 150px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 14px 10px 12px; border-radius: var(--r);
+      cursor: pointer; border: 1.5px solid var(--brd2);
+      background: var(--surf); position: relative; overflow: hidden;
+      transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .vibe-btn::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.14s; }
+    .vibe-btn:hover { transform: translateY(-4px) scale(1.03); }
+    .vibe-btn:active { transform: translateY(-1px) scale(0.98); }
+    .vibe-emoji { font-size: 32px; line-height: 1; position: relative; z-index: 1; }
+    .vibe-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; position: relative; z-index: 1; }
+    .vibe-key { font-size: 10px; background: var(--surf3); border: 1px solid var(--brd2); border-radius: 3px; padding: 1px 5px; color: #444; position: relative; z-index: 1; }
+
+    /* ── Results modal ── */
+    .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.88); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .overlay.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--surf); border: 1px solid var(--brd2); border-radius: 14px; width: 100%; max-width: 700px; max-height: 88vh; overflow-y: auto; padding: 24px; transform: translateY(14px); transition: transform 0.2s; }
+    .overlay.open .modal { transform: translateY(0); }
+    .modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-hdr h2 { font-size: 17px; font-weight: 700; }
+    .modal-close { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); width: 30px; height: 30px; border-radius: 7px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+    /* Pie chart (pure CSS conic-gradient) */
+    .pie-wrap { display: flex; gap: 20px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .pie-chart { width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0; }
+    .pie-legend { display: flex; flex-direction: column; gap: 6px; }
+    .pie-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .pie-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Notes table */
+    .notes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .notes-table th { text-align: left; padding: 7px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .notes-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .notes-table tr:last-child td { border-bottom: none; }
+
+    /* Done screen */
+    .done-screen { max-width: 500px; text-align: center; padding: 20px; }
+    .done-emoji-row { display: flex; gap: 8px; font-size: 36px; justify-content: center; margin-bottom: 12px; }
+
+    /* Hdr btn */
+    .hdr-btn { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); padding: 5px 12px; border-radius: 7px; font-size: 12px; cursor: pointer; transition: background 0.12s; }
+    .hdr-btn:hover { background: var(--surf3); }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surf2); border: 1px solid rgba(124,108,252,0.4); border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 600px) {
+      main { padding: 12px; gap: 10px; }
+      .vibe-btn { padding: 10px 6px 8px; min-width: 64px; }
+      .vibe-emoji { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-v">Vibe</span><span class="logo-c">Check</span> <sup class="logo-sup">v2</sup></div>
+  <span style="font-size:11px;color:var(--muted)" id="session-meta">—</span>
+  <div class="header-spacer"></div>
+  <button class="hdr-btn" onclick="openResults()">📊 Results</button>
+  <button class="hdr-btn" onclick="exportCSV()">⬇ CSV</button>
+  <button class="hdr-btn" id="undo-btn" onclick="undoLast()" style="display:none">↩ Undo</button>
+</header>
+
+<div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+<div class="progress-info">
+  <span id="prog-text">0 / 0 labeled</span>
+  <div class="vibe-counts" id="vibe-counts"></div>
+</div>
+
+<main id="main-area">
+  <div class="video-card" id="video-card">
+    <div class="video-wrap">
+      <video id="main-vid" playsinline loop muted></video>
+      <div class="vibe-flash" id="vibe-flash"></div>
+    </div>
+    <div class="vid-footer">
+      <div><div class="vid-label" id="vid-label">Loading…</div><div class="vid-task" id="vid-task">—</div></div>
+      <div class="vid-spacer"></div>
+      <div class="vid-time" id="vid-time">0:00</div>
+    </div>
+  </div>
+
+  <div class="ctrl-bar">
+    <div class="scr-row">
+      <span class="scr-t" id="scr-cur">0:00</span>
+      <input type="range" class="vid-scr" id="vid-scr" min="0" max="100" step="0.1" value="0">
+      <span class="scr-t" id="scr-dur">0:00</span>
+    </div>
+    <div class="pb-row">
+      <button class="pb-btn" onclick="togglePlay()" id="play-btn">▶</button>
+      <button class="pb-btn" onclick="setSpeed(0.5)">½×</button>
+      <button class="pb-btn active speed-btn" onclick="setSpeed(1)">1×</button>
+      <button class="pb-btn speed-btn" onclick="setSpeed(2)">2×</button>
+      <div class="pb-spacer"></div>
+      <button class="skip-btn" onclick="skipVideo()">Skip →</button>
+    </div>
+  </div>
+
+  <div class="note-row" id="note-row" style="display:none">
+    <textarea class="note-field" id="note-field" placeholder="Note (optional — shown in results)" rows="2"></textarea>
+  </div>
+
+  <div class="vibe-row" id="vibe-row"></div>
+
+</main>
+
+<!-- Results overlay -->
+<div class="overlay" id="overlay" onclick="closeIfBg(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2>📊 VibeCheck v2 Results</h2>
+      <button class="modal-close" onclick="closeOverlay()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════
+     CONFIGURATION — edit this section
+     ════════════════════════════════════ -->
+<script>
+const SESSION_NAME = 'vibe-v2-session-1';
+const EVALUATOR    = 'evaluator-1';
+
+// Replace with your own video URLs
+const VIDEOS = [
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',                 label: 'Original Demo',     task: 'Pick and place — baseline' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4', label: 'Cosmos Gen v1',     task: 'Pick and place — aug run 1' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',          label: 'Cosmos Gen v2',     task: 'Pick and place — aug run 2' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',          label: 'Cosmos Gen v3',     task: 'Pick and place — aug run 3' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',    label: 'Cosmos Gen v4',     task: 'Pick and place — aug run 4' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',                 label: 'Cosmos Gen v5',     task: 'Pick and place — aug run 5' },
+];
+
+// ── CUSTOMIZABLE VIBES ──
+// id: unique identifier
+// emoji: the emoji shown on button
+// label: text label
+// key: keyboard shortcut (single char)
+// color: badge/UI color
+const VIBES = [
+  { id: 1, emoji: '💀', label: 'Fail',     key: '1', color: '#ef4444' },
+  { id: 2, emoji: '🤔', label: 'Marginal', key: '2', color: '#f59e0b' },
+  { id: 3, emoji: '😐', label: 'OK',       key: '3', color: '#6b7280' },
+  { id: 4, emoji: '👍', label: 'Good',     key: '4', color: '#34d399' },
+  { id: 5, emoji: '🔥', label: 'Perfect',  key: '5', color: '#a78bfa' },
+];
+
+// Feature flags
+const SHOW_NOTES = true;   // set false to hide the notes textarea
+</script>
+<!-- ════════════════════════════════════ -->
+
+<script>
+// ── State ──
+const STORAGE_KEY = `vibe-v2:${SESSION_NAME}`;
+let labels  = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let curIdx  = 0;
+let curSpeed = 1;
+let scrDrag  = false;
+
+function fmtT(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+
+// ── Init ──
+document.getElementById('session-meta').textContent = `${SESSION_NAME} · ${EVALUATOR}`;
+if (SHOW_NOTES) document.getElementById('note-row').style.display = '';
+
+// ── Build vibe buttons dynamically ──
+const vibeRow = document.getElementById('vibe-row');
+VIBES.forEach(v => {
+  const btn = document.createElement('div');
+  btn.className = 'vibe-btn';
+  btn.style.setProperty('--v-color', v.color);
+  btn.dataset.vibeId = v.id;
+  btn.innerHTML = `
+    <span class="vibe-emoji">${v.emoji}</span>
+    <span class="vibe-label" style="color:${v.color}">${v.label}</span>
+    <span class="vibe-key">${v.key}</span>`;
+  // Dynamic hover colors
+  btn.style.borderColor = v.color + '40';
+  btn.addEventListener('mouseenter', () => { btn.style.boxShadow = `0 8px 32px ${v.color}30`; btn.style.background = v.color + '10'; });
+  btn.addEventListener('mouseleave', () => { btn.style.boxShadow = ''; btn.style.background = 'var(--surf)'; });
+  btn.onclick = () => submitVibe(v.id);
+  vibeRow.appendChild(btn);
+});
+
+// Skip already-labeled
+const labeledFiles = new Set(labels.map(l => l.file));
+while (curIdx < VIDEOS.length && labeledFiles.has(VIDEOS[curIdx].file)) curIdx++;
+loadVideo(curIdx);
+
+// ── Load video ──
+function loadVideo(idx) {
+  if (idx >= VIDEOS.length) { showDone(); return; }
+  const v = VIDEOS[idx];
+  const vid = document.getElementById('main-vid');
+  vid.src = v.file; vid.load(); vid.play().catch(()=>{});
+  vid.playbackRate = curSpeed;
+  document.getElementById('vid-label').textContent = v.label;
+  document.getElementById('vid-task').textContent  = v.task;
+  document.getElementById('video-card').style.border = '1px solid var(--brd2)';
+  document.getElementById('video-card').style.boxShadow = '';
+  if (SHOW_NOTES) document.getElementById('note-field').value = '';
+  updateProgress();
+}
+
+// Time + scrubber
+const vid    = document.getElementById('main-vid');
+const scr    = document.getElementById('vid-scr');
+const scrCur = document.getElementById('scr-cur');
+const scrDur = document.getElementById('scr-dur');
+
+setInterval(() => {
+  if (!vid.duration) return;
+  document.getElementById('vid-time').textContent = fmtT(vid.currentTime);
+  scrCur.textContent = fmtT(vid.currentTime);
+  scrDur.textContent = fmtT(vid.duration);
+  if (!scrDrag) { scr.max = vid.duration; scr.value = vid.currentTime; scr.style.setProperty('--pct', (vid.currentTime/vid.duration*100).toFixed(2)+'%'); }
+}, 150);
+
+scr.addEventListener('mousedown', () => { scrDrag=true; });
+scr.addEventListener('mouseup', () => { vid.currentTime = parseFloat(scr.value); scrDrag=false; });
+scr.addEventListener('change', () => { vid.currentTime = parseFloat(scr.value); scrDrag=false; });
+vid.addEventListener('play',  () => { document.getElementById('play-btn').textContent='⏸'; });
+vid.addEventListener('pause', () => { document.getElementById('play-btn').textContent='▶'; });
+
+function togglePlay() { vid.paused ? vid.play() : vid.pause(); }
+
+const speedVals = [0.5, 1, 2];
+function setSpeed(s) {
+  curSpeed=s; vid.playbackRate=s;
+  document.querySelectorAll('.speed-btn').forEach((b,i)=>b.classList.toggle('active',speedVals[i]===s));
+}
+
+// ── Submit vibe ──
+function submitVibe(vibeId) {
+  if (curIdx >= VIDEOS.length) return;
+  const v = VIDEOS[curIdx];
+  const vibe = VIBES.find(x => x.id === vibeId);
+
+  // Flash
+  const flash = document.getElementById('vibe-flash');
+  flash.textContent = vibe.emoji;
+  flash.style.opacity = '0';
+  flash.classList.remove('show');
+  requestAnimationFrame(() => { flash.classList.add('show'); });
+
+  // Card glow
+  const card = document.getElementById('video-card');
+  card.style.border = `1px solid ${vibe.color}60`;
+  card.style.boxShadow = `0 0 32px ${vibe.color}20`;
+
+  const entry = {
+    session: SESSION_NAME, evaluator: EVALUATOR,
+    file: v.file, label: v.label, task: v.task,
+    vibe_id: vibeId, vibe_label: vibe.label, vibe_emoji: vibe.emoji,
+    note: SHOW_NOTES ? document.getElementById('note-field').value.trim() : '',
+    timestamp: new Date().toISOString(),
+  };
+  labels.push(entry);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(labels));
+  document.getElementById('undo-btn').style.display = '';
+
+  showToast(`${vibe.emoji} ${vibe.label}`);
+  updateProgress();
+  setTimeout(() => { curIdx++; loadVideo(curIdx); }, 350);
+}
+
+function skipVideo() { curIdx++; loadVideo(curIdx); showToast('Skipped'); }
+
+function undoLast() {
+  if (!labels.length) return;
+  const last = labels.pop();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(labels));
+  curIdx = VIDEOS.findIndex(v => v.file === last.file);
+  loadVideo(curIdx);
+  updateProgress();
+  showToast(`↩ Undid ${last.vibe_emoji} on ${last.label}`);
+  if (!labels.length) document.getElementById('undo-btn').style.display = 'none';
+}
+
+// ── Progress ──
+function updateProgress() {
+  const total = VIDEOS.length, done = labels.length;
+  document.getElementById('prog-fill').style.width = (done/total*100)+'%';
+  document.getElementById('prog-text').textContent = `${done} / ${total} labeled`;
+
+  const counts = document.getElementById('vibe-counts');
+  counts.innerHTML = '';
+  VIBES.forEach(v => {
+    const n = labels.filter(l=>l.vibe_id===v.id).length;
+    if (!n) return;
+    const span = document.createElement('span');
+    span.innerHTML = `${v.emoji} <span style="color:${v.color};font-weight:700">${n}</span>`;
+    counts.appendChild(span);
+  });
+}
+updateProgress();
+
+// ── Done screen ──
+function showDone() {
+  document.getElementById('main-area').innerHTML = `
+    <div class="done-screen">
+      <div class="done-emoji-row">${VIBES.map(v=>v.emoji).join('')}</div>
+      <h2 style="font-size:22px;font-weight:800;margin-bottom:8px">All labeled!</h2>
+      <p style="font-size:14px;color:var(--muted)">${labels.length} labels · <strong>${SESSION_NAME}</strong></p>
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:center;flex-wrap:wrap">
+        <button class="hdr-btn" style="padding:10px 18px;font-size:13px;font-weight:600" onclick="openResults()">📊 Results</button>
+        <button class="hdr-btn" style="padding:10px 18px;font-size:13px;font-weight:600" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>`;
+  document.getElementById('prog-fill').style.width = '100%';
+}
+
+// ── Results modal with pie chart ──
+function openResults() {
+  if (!labels.length) { showToast('No labels yet!'); return; }
+  const total = labels.length;
+
+  // Pie chart via conic-gradient
+  const vibeCounts = VIBES.map(v => ({ ...v, n: labels.filter(l=>l.vibe_id===v.id).length }));
+  let pieGradient = '', cumPct = 0;
+  const pieSegments = vibeCounts.map(v => {
+    const pct = v.n / total * 100;
+    const start = cumPct; cumPct += pct;
+    return { ...v, pct, start, end: cumPct };
+  }).filter(v => v.n > 0);
+
+  pieGradient = pieSegments.map(v => `${v.color} ${v.start.toFixed(1)}% ${v.end.toFixed(1)}%`).join(', ');
+
+  const legendHTML = pieSegments.map(v => `
+    <div class="pie-legend-row">
+      <div class="pie-dot" style="background:${v.color}"></div>
+      <span>${v.emoji} ${v.label}</span>
+      <span style="font-weight:700;color:${v.color};margin-left:4px">${v.n}</span>
+      <span style="color:var(--muted);margin-left:2px">(${v.pct.toFixed(0)}%)</span>
+    </div>`).join('');
+
+  // Distribution bar
+  const barHTML = vibeCounts.map(v => {
+    const pct = total > 0 ? (v.n/total*100).toFixed(1) : 0;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+      <span style="font-size:16px">${v.emoji}</span>
+      <span style="font-size:12px;color:var(--muted);min-width:65px">${v.label}</span>
+      <div style="flex:1;height:8px;background:var(--brd2);border-radius:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${v.color};border-radius:4px;transition:width 0.5s"></div></div>
+      <span style="font-size:12px;font-weight:700;color:${v.color};min-width:18px">${v.n}</span>
+    </div>`;
+  }).join('');
+
+  // Notes table (only if there are any notes)
+  const withNotes = labels.filter(l => l.note);
+  const notesTable = withNotes.length ? `
+    <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin:16px 0 8px">Notes</div>
+    <table class="notes-table">
+      <thead><tr><th>Video</th><th>Vibe</th><th>Note</th></tr></thead>
+      <tbody>${withNotes.map(l=>`<tr><td style="font-weight:600">${l.label}</td><td>${l.vibe_emoji}</td><td style="color:var(--muted)">${l.note}</td></tr>`).join('')}</tbody>
+    </table>` : '';
+
+  // All labels table
+  const labelsTable = `
+    <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin:16px 0 8px">All Labels</div>
+    <table class="notes-table">
+      <thead><tr><th>Video</th><th>Vibe</th><th>Label</th><th>Time</th></tr></thead>
+      <tbody>${labels.map(l=>`<tr><td style="font-weight:600">${l.label}</td><td style="font-size:18px">${l.vibe_emoji}</td><td style="color:${VIBES.find(v=>v.id===l.vibe_id)?.color||'#fff'};font-weight:600">${l.vibe_label}</td><td style="font-size:11px;color:var(--muted)">${new Date(l.timestamp).toLocaleTimeString()}</td></tr>`).join('')}</tbody>
+    </table>`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="pie-wrap">
+      <div class="pie-chart" style="background:conic-gradient(${pieGradient})"></div>
+      <div class="pie-legend">${legendHTML}</div>
+    </div>
+    ${barHTML}
+    ${notesTable}
+    ${labelsTable}
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="hdr-btn" style="padding:8px 16px" onclick="exportCSV()">⬇ CSV</button>
+      <button class="hdr-btn" style="padding:8px 16px" onclick="clearAll()">🗑 Clear</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeOverlay() { document.getElementById('overlay').classList.remove('open'); }
+function closeIfBg(e) { if (e.target===document.getElementById('overlay')) closeOverlay(); }
+
+// ── CSV export ──
+function exportCSV() {
+  if (!labels.length) { showToast('No labels!'); return; }
+  const cols = ['session','evaluator','file','label','task','vibe_id','vibe_label','vibe_emoji','note','timestamp'];
+  const rows = labels.map(l => cols.map(k => JSON.stringify(l[k]??'')).join(','));
+  const csv = [cols.join(','),...rows].join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${SESSION_NAME}-vibecheck-v2.csv`});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${labels.length} labels`);
+}
+
+function clearAll() {
+  if (!confirm(`Delete all ${labels.length} labels?`)) return;
+  labels=[]; localStorage.removeItem(STORAGE_KEY);
+  closeOverlay(); curIdx=0; loadVideo(0); updateProgress();
+  document.getElementById('undo-btn').style.display='none';
+  showToast('Cleared!');
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='TEXTAREA') return;
+  const byKey = VIBES.find(v => v.key === e.key);
+  if (byKey) { submitVibe(byKey.id); return; }
+  switch (e.key) {
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'r': case 'R': vid.currentTime=0; vid.play(); break;
+    case 'ArrowLeft':  e.preventDefault(); vid.currentTime=Math.max(0,vid.currentTime-3); break;
+    case 'ArrowRight': e.preventDefault(); vid.currentTime=Math.min(vid.duration||999,vid.currentTime+3); break;
+    case 's': case 'S': skipVideo(); break;
+    case 'z': if(e.metaKey||e.ctrlKey){e.preventDefault();undoLast();} break;
+    case 'Escape': closeOverlay(); break;
+  }
+});
+
+// ── Toast ──
+let toastT;
+function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+</script>
+</body>
+</html>

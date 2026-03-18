@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RobotOpsPlaybook — Cosmos Transfer 2.5 Setup Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #07070e; --surf: #0d0d1a; --surf2: #131320; --surf3: #181828;
+      --border: #1c1c30; --brd2: #232338; --text: #e0e0f4; --muted: #545470;
+      --accent: #7c6cfc; --acc2: #5a4de0; --green: #22c55e; --amber: #fbbf24;
+      --red: #ef4444; --cyan: #22d3ee; --r: 10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: rgba(7,7,14,0.97); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 28px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+    .logo span { color: var(--accent); }
+    .header-spacer { flex: 1; }
+
+    /* Progress bar */
+    .overall-progress {
+      background: var(--surf); border-bottom: 1px solid var(--border);
+      padding: 8px 28px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .prog-label { font-size: 12px; color: var(--muted); }
+    .prog-track { flex: 1; height: 6px; background: var(--brd2); border-radius: 3px; overflow: hidden; }
+    .prog-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 3px; transition: width 0.4s ease; }
+    .prog-pct { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 36px; text-align: right; }
+
+    .layout { display: grid; grid-template-columns: 260px 1fr; max-width: 1100px; margin: 0 auto; padding: 28px; gap: 24px; align-items: start; }
+
+    /* ── Sidebar ── */
+    .sidebar { position: sticky; top: 88px; }
+    .sidebar-section { margin-bottom: 14px; }
+    .sidebar-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px; padding: 0 8px; }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 7px;
+      cursor: pointer; transition: background 0.12s;
+      text-decoration: none; color: var(--text);
+      margin-bottom: 2px;
+    }
+    .nav-item:hover { background: var(--surf2); }
+    .nav-item.active { background: rgba(124,108,252,0.12); color: #c4b5fd; }
+    .nav-item.completed { color: var(--green); }
+    .nav-icon { font-size: 14px; flex-shrink: 0; }
+    .nav-title { font-size: 13px; font-weight: 500; flex: 1; }
+    .nav-check { font-size: 12px; }
+    .nav-count { font-size: 10px; background: var(--surf2); border: 1px solid var(--brd2); padding: 1px 5px; border-radius: 10px; color: var(--muted); }
+
+    /* Reset button */
+    .reset-btn { width: 100%; background: transparent; border: 1px solid var(--brd2); color: var(--muted); padding: 7px; border-radius: 7px; font-size: 12px; cursor: pointer; transition: all 0.12s; margin-top: 8px; }
+    .reset-btn:hover { color: var(--text); border-color: var(--red); }
+
+    /* ── Main content ── */
+    .main-content { display: flex; flex-direction: column; gap: 20px; }
+
+    /* Section card */
+    .section-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .section-card.all-done { border-color: rgba(34,197,94,0.3); }
+
+    .section-header {
+      padding: 16px 20px; display: flex; align-items: center; gap: 14px;
+      border-bottom: 1px solid var(--border); cursor: pointer;
+    }
+    .section-icon { font-size: 22px; }
+    .section-title { font-size: 16px; font-weight: 700; color: #fff; flex: 1; }
+    .section-meta { font-size: 12px; color: var(--muted); }
+    .section-progress-pill {
+      font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+      background: var(--surf2); border: 1px solid var(--brd2); color: var(--muted);
+    }
+    .section-progress-pill.done { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: var(--green); }
+    .section-progress-pill.partial { background: rgba(124,108,252,0.12); border-color: rgba(124,108,252,0.3); color: #c4b5fd; }
+
+    .section-body { padding: 4px 0 12px; }
+
+    /* Check item */
+    .check-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 20px; cursor: pointer;
+      transition: background 0.1s;
+      border-radius: 0;
+    }
+    .check-item:hover { background: var(--surf2); }
+    .check-item.checked { opacity: 0.65; }
+
+    .check-box {
+      width: 18px; height: 18px; border-radius: 5px;
+      border: 1.5px solid var(--brd2);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 1px;
+      transition: all 0.15s;
+      background: transparent;
+    }
+    .check-item.checked .check-box {
+      background: var(--green);
+      border-color: var(--green);
+    }
+    .check-box-tick { font-size: 11px; color: #fff; display: none; }
+    .check-item.checked .check-box-tick { display: block; }
+
+    .check-content { flex: 1; }
+    .check-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .check-item.checked .check-title { text-decoration: line-through; color: var(--muted); }
+    .check-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .check-item.checked .check-desc { display: none; }
+
+    /* Code snippet */
+    .code-snippet {
+      background: #000; border: 1px solid var(--brd2);
+      border-radius: 7px; padding: 10px 14px; margin-top: 7px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11.5px; line-height: 1.7; color: #86efac;
+      overflow-x: auto; white-space: pre;
+      position: relative;
+    }
+    .copy-code-btn {
+      position: absolute; top: 6px; right: 8px;
+      background: var(--surf2); border: 1px solid var(--brd2);
+      color: var(--muted); padding: 2px 7px; border-radius: 4px;
+      font-size: 10px; cursor: pointer;
+    }
+    .copy-code-btn:hover { color: var(--text); }
+    .copy-code-btn.copied { color: var(--green); }
+
+    /* Links in items */
+    .check-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--accent); text-decoration: none;
+      background: rgba(124,108,252,0.1); border: 1px solid rgba(124,108,252,0.2);
+      padding: 2px 8px; border-radius: 4px; margin-top: 5px;
+      transition: background 0.12s;
+    }
+    .check-link:hover { background: rgba(124,108,252,0.2); }
+
+    /* Tag pills */
+    .check-tags { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+    .check-tag { font-size: 10px; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+
+    /* Done banner */
+    .done-banner {
+      background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.25);
+      border-radius: var(--r); padding: 14px 18px;
+      display: none; align-items: center; gap: 10px;
+    }
+    .done-banner.show { display: flex; }
+    .done-banner .icon { font-size: 22px; }
+    .done-banner-text h3 { font-size: 14px; font-weight: 700; color: var(--green); }
+    .done-banner-text p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surf2); border: 1px solid rgba(124,108,252,0.4); border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .sidebar { position: static; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Robot<span>Ops</span>Playbook</div>
+  <span style="font-size:12px;color:var(--muted)">Cosmos Transfer 2.5 Setup Guide</span>
+  <div class="header-spacer"></div>
+  <span style="font-size:11px;color:var(--muted)" id="header-stats">—</span>
+</header>
+
+<div class="overall-progress">
+  <span class="prog-label">Overall Progress</span>
+  <div class="prog-track"><div class="prog-fill" id="overall-fill" style="width:0%"></div></div>
+  <span class="prog-pct" id="overall-pct">0%</span>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar nav -->
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Sections</div>
+      <div id="sidebar-nav"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Tools Used</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.8;padding:0 8px">
+        🔬 CosmosPromptForge<br>
+        ⚙️ Cosmos Config Builder<br>
+        ⊞ AugmentationMatrix<br>
+        ⚡ VibeCheck v2<br>
+        ⭐ SwagScore v2<br>
+        📊 PolicyLeaderboard v2
+      </div>
+    </div>
+    <button class="reset-btn" onclick="resetAll()">↺ Reset All Checks</button>
+  </nav>
+
+  <!-- Main content -->
+  <div class="main-content" id="main-content">
+    <div class="done-banner" id="done-banner">
+      <span class="icon">🎉</span>
+      <div class="done-banner-text">
+        <h3>Pipeline complete!</h3>
+        <p>All steps checked. You're ready to evaluate your Cosmos Transfer 2.5 augmented dataset.</p>
+      </div>
+    </div>
+    <!-- Sections injected by JS -->
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ──────────────────────────────────────────────────────────────
+// PLAYBOOK DEFINITION
+// Each section has an id, icon, title, meta, and an array of items.
+// Items: { id, title, desc, code?, link?, tags? }
+// ──────────────────────────────────────────────────────────────
+const PLAYBOOK = [
+  {
+    id: 'env-setup',
+    icon: '⚙️',
+    title: 'Environment Setup',
+    meta: 'Python, CUDA, dependencies',
+    items: [
+      { id: 'cuda-check', title: 'Verify CUDA GPU is available', desc: 'Cosmos Transfer 2.5 requires an NVIDIA GPU with ≥12GB VRAM (14B model: ≥24GB). Check CUDA availability and driver version.',
+        code: 'nvidia-smi\npython3 -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"',
+        tags: [{label:'required', color:'var(--red)', bg:'rgba(239,68,68,0.1)'}]
+      },
+      { id: 'conda-env', title: 'Create conda environment', desc: 'Create a dedicated environment to avoid dependency conflicts with other projects.',
+        code: 'conda create -n cosmos-transfer python=3.10 -y\nconda activate cosmos-transfer',
+      },
+      { id: 'install-deps', title: 'Install Cosmos Transfer dependencies', desc: 'Install the package and its requirements. This may take a few minutes.',
+        code: 'pip install cosmos-transfer\n# or from source:\ngit clone https://github.com/nvidia/Cosmos-Transfer\ncd Cosmos-Transfer && pip install -e ".[all]"',
+        link: { url: 'https://github.com/nvidia/Cosmos', label: '→ Cosmos GitHub' }
+      },
+      { id: 'install-xformers', title: 'Install xFormers (recommended)', desc: 'xFormers provides Flash Attention for ~30% faster inference and lower VRAM usage.',
+        code: 'pip install xformers --index-url https://download.pytorch.org/whl/cu118',
+        tags: [{label:'optional', color:'var(--amber)', bg:'rgba(251,191,36,0.1)'}]
+      },
+      { id: 'verify-install', title: 'Verify installation', desc: 'Quick check that the core package imports work correctly.',
+        code: 'python3 -c "from cosmos_transfer.inference import CosmosTransfer; print(\'OK\')"',
+      },
+    ],
+  },
+  {
+    id: 'model-download',
+    icon: '📦',
+    title: 'Model Download',
+    meta: 'Weights, checkpoints',
+    items: [
+      { id: 'huggingface-login', title: 'Log in to HuggingFace (for gated models)', desc: 'Some Cosmos model weights require accepting the license on HuggingFace. Create an account and generate an access token.',
+        code: 'pip install huggingface_hub\nhuggingface-cli login',
+        link: { url: 'https://huggingface.co/settings/tokens', label: '→ HuggingFace Tokens' }
+      },
+      { id: 'download-14b', title: 'Download Cosmos-Transfer2.5-14B weights', desc: 'The 14B model is recommended for most use cases. ~28GB disk space required.',
+        code: 'huggingface-cli download nvidia/Cosmos-Transfer2.5-14B --local-dir ./models/cosmos-14b',
+        tags: [{label:'recommended', color:'var(--green)', bg:'rgba(34,197,94,0.1)'}]
+      },
+      { id: 'verify-weights', title: 'Verify model files are complete', desc: 'Check that all required weight files are present and uncorrupted.',
+        code: 'ls -lh models/cosmos-14b/\npython3 -c "from safetensors import safe_open; print(\'weights OK\')"',
+      },
+    ],
+  },
+  {
+    id: 'data-prep',
+    icon: '🎬',
+    title: 'Data Preparation',
+    meta: 'Videos, format, quality check',
+    items: [
+      { id: 'collect-demos', title: 'Collect robot demo videos', desc: 'Record robot demonstrations at ≥30fps. Aim for 720p or higher. Ensure consistent lighting and camera position across episodes.',
+        tags: [{label:'prerequisite', color:'var(--cyan)', bg:'rgba(34,211,238,0.1)'}]
+      },
+      { id: 'check-format', title: 'Convert to H.264 MP4 (if needed)', desc: 'Cosmos Transfer works best with H.264 encoded MP4 files. Convert if your recordings are in a different format.',
+        code: '# Convert all videos in a folder\nfor f in *.avi; do\n  ffmpeg -i "$f" -c:v libx264 -crf 23 "${f%.*}.mp4"\ndone',
+      },
+      { id: 'keyframe-review', title: 'Review demos with KeyframeExtractor', desc: 'Use KeyframeExtractor to quickly scan all demos for quality issues before running expensive Cosmos inference.',
+        code: 'python keyframe_extractor.py demo_ep1.mp4 --n 15 --output ep1_review.html\nopen ep1_review.html',
+        tags: [{label:'tool: KeyframeExtractor', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'organize-dataset', title: 'Organize dataset structure', desc: 'Create a clean directory structure for originals and generated outputs.',
+        code: 'mkdir -p dataset/originals dataset/generated dataset/evaluations\n# Move demos:\ncp demo_*.mp4 dataset/originals/',
+      },
+    ],
+  },
+  {
+    id: 'prompt-design',
+    icon: '✨',
+    title: 'Prompt Design',
+    meta: 'Cosmos prompts, augmentation goals',
+    items: [
+      { id: 'open-forge', title: 'Open CosmosPromptForge to design prompts', desc: 'Use CosmosPromptForge to design augmentation prompts interactively. Select lighting, environment, style, and motion characteristics.',
+        link: { url: '../exp-002/index.html', label: '→ Open CosmosPromptForge' },
+        tags: [{label:'tool: CosmosPromptForge', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'design-variants', title: 'Design 3–6 augmentation variants', desc: 'Create diverse prompts: at least one lighting change, one environment change, one style change. Save as recipes in CosmosPromptForge.',
+        tags: [{label:'recommended: 5 variants', color:'var(--amber)', bg:'rgba(251,191,36,0.1)'}]
+      },
+      { id: 'save-prompts', title: 'Save prompts to a text file', desc: 'Export prompts from CosmosPromptForge and save locally for batch processing.',
+        code: '# prompts.txt\nA robotic arm performing pick and place, bright daylight illumination, clean lab environment, photorealistic 4K\nA robotic arm performing pick and place, dim low ambient light conditions, industrial factory floor, cinematic\nA robotic arm performing pick and place, warm indoor incandescent lighting, home kitchen environment',
+      },
+    ],
+  },
+  {
+    id: 'inference',
+    icon: '🚀',
+    title: 'Running Inference',
+    meta: 'Cosmos Transfer 2.5 generation',
+    items: [
+      { id: 'open-config-builder', title: 'Use Cosmos Config Builder to generate config', desc: 'Open the Cosmos Config Builder to set all inference params (guidance scale, temporal consistency, etc.) and export as YAML/JSON/CLI.',
+        link: { url: '../exp-014/index.html', label: '→ Open Config Builder' },
+        tags: [{label:'tool: Config Builder', color:'var(--cyan)', bg:'rgba(34,211,238,0.1)'}]
+      },
+      { id: 'single-test-run', title: 'Run a single test inference first', desc: 'Before batch processing, test with one video and one prompt to verify your setup works.',
+        code: 'python inference.py \\\n  --model Cosmos-Transfer2.5-14B \\\n  --input-video dataset/originals/ep1.mp4 \\\n  --output-video dataset/generated/ep1_bright_day.mp4 \\\n  --prompt "A robotic arm, bright daylight, clean lab" \\\n  --guidance-scale 7.0 \\\n  --temporal-consistency 0.8 \\\n  --num-inference-steps 25',
+        tags: [{label:'required', color:'var(--red)', bg:'rgba(239,68,68,0.1)'}]
+      },
+      { id: 'batch-inference', title: 'Run batch inference across all demos', desc: 'Loop through all demo videos and all prompt variants to generate the full augmented dataset.',
+        code: '#!/bin/bash\nfor video in dataset/originals/*.mp4; do\n  for prompt_file in prompts/*.txt; do\n    out="dataset/generated/$(basename $video .mp4)_$(basename $prompt_file .txt).mp4"\n    python inference.py --input-video "$video" --output-video "$out" \\\n      --prompt "$(cat $prompt_file)" --guidance-scale 7.0 &\n  done\ndone\nwait',
+      },
+      { id: 'monitor-vram', title: 'Monitor VRAM during generation', desc: 'Watch GPU memory usage during inference. If OOM, reduce --num-frames or use --offload-strategy sequential.',
+        code: 'watch -n 1 nvidia-smi',
+        tags: [{label:'tip', color:'var(--amber)', bg:'rgba(251,191,36,0.1)'}]
+      },
+    ],
+  },
+  {
+    id: 'quality-check',
+    icon: '🔬',
+    title: 'Quality Validation',
+    meta: 'Triage, rating, pixel diff',
+    items: [
+      { id: 'aug-matrix-review', title: 'Review augmentations with AugmentationMatrix', desc: 'Open AugmentationMatrix to see all generated videos side-by-side, organized by episode and augmentation type.',
+        link: { url: '../exp-010/index.html', label: '→ Open AugmentationMatrix' },
+        tags: [{label:'tool: AugMatrix', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'run-batch-diff', title: 'Run BatchDiff to score all generated videos', desc: 'Use BatchDiff to automatically score PSNR/SSIM/mean-diff for every generated video vs its reference.',
+        code: 'python batch_diff.py \\\n  --ref-dir dataset/originals/ \\\n  --gen-dir dataset/generated/ \\\n  --match-prefix \\\n  --output quality_report.html',
+        tags: [{label:'tool: BatchDiff', color:'var(--cyan)', bg:'rgba(34,211,238,0.1)'}]
+      },
+      { id: 'vibecheck-triage', title: 'Quick triage with VibeCheck v2', desc: 'Load generated videos into VibeCheck v2 for fast 💀/🤔/😐/👍/🔥 triage. Takes ~2s per video.',
+        link: { url: '../exp-019/index.html', label: '→ Open VibeCheck v2' },
+        tags: [{label:'tool: VibeCheck v2', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'deep-rating', title: 'Rate filtered set with SwagScore v2', desc: 'Rate the top-30% of videos with SwagScore v2 (5-dim sliders). Use the compare mode to diff any two videos.',
+        link: { url: '../exp-017/index.html', label: '→ Open SwagScore v2' },
+        tags: [{label:'tool: SwagScore v2', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'frame-diff-debug', title: 'Debug artifacts with VideoFrameDiff', desc: 'For any video with artifacts or unexpected diffs, open VideoFrameDiff to inspect frame-by-frame.',
+        link: { url: '../exp-009/index.html', label: '→ Open VideoFrameDiff' },
+      },
+    ],
+  },
+  {
+    id: 'training',
+    icon: '🏋️',
+    title: 'Training Integration',
+    meta: 'Use augmented data for policy training',
+    items: [
+      { id: 'filter-dataset', title: 'Filter to accepted augmented videos', desc: 'Export accepted videos from SwagScore v2 (CSV) and copy them to your training dataset directory.',
+        code: '# After exporting SwagScore v2 CSV:\npython3 -c "\nimport csv\nwith open(\'swag-session-v2.csv\') as f:\n    accepted = [r[\'file\'] for r in csv.DictReader(f) if float(r[\'aggregate\']) >= 7.0]\nprint(f\'{len(accepted)} videos accepted\')"',
+      },
+      { id: 'merge-datasets', title: 'Merge with original dataset', desc: 'Combine originals + accepted augmented videos. Typical ratio: 1 original : 3–5 augmented.',
+        code: 'rsync -av dataset/originals/ training_data/\nrsync -av dataset/generated_accepted/ training_data/',
+      },
+      { id: 'run-training', title: 'Run policy training with augmented data', desc: 'Start π0 or ACT training with the expanded dataset. Track progress with PolicyLeaderboard v2.',
+        link: { url: '../exp-021/index.html', label: '→ Open PolicyLeaderboard v2' },
+        tags: [{label:'tool: PolicyLB v2', color:'var(--accent)', bg:'rgba(124,108,252,0.1)'}]
+      },
+      { id: 'log-results', title: 'Log evaluation results to PolicyLeaderboard', desc: 'After each training run, evaluate on a held-out test set and add results to PolicyLeaderboard v2. Track dim scores and history.',
+      },
+      { id: 'iterate', title: 'Iterate: new prompts → generate → evaluate → train', desc: 'Use learnings from policy evaluation to design better augmentation prompts. Typically 2–3 iterations yields significant improvement.',
+        tags: [{label:'ongoing', color:'var(--amber)', bg:'rgba(251,191,36,0.1)'}]
+      },
+    ],
+  },
+];
+
+// ──────────────────────────────────────────────────────────────
+// State persistence
+// ──────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'robot-ops-playbook:checks';
+let checks = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+function saveChecks() { localStorage.setItem(STORAGE_KEY, JSON.stringify(checks)); }
+
+function toggleCheck(itemId) {
+  checks[itemId] = !checks[itemId];
+  saveChecks();
+  renderProgress();
+  renderSidebar();
+  // Update just this item
+  const el = document.getElementById(`item-${itemId}`);
+  if (el) {
+    el.classList.toggle('checked', !!checks[itemId]);
+    const section = el.closest('.section-card');
+    if (section) {
+      const sectionId = section.id;
+      const sectionDef = PLAYBOOK.find(s => s.id === sectionId);
+      if (sectionDef) updateSectionProgress(sectionId, sectionDef);
+    }
+  }
+}
+
+function resetAll() {
+  if (!confirm('Reset all checkmarks?')) return;
+  checks = {}; saveChecks();
+  buildAll(); renderProgress();
+}
+
+// ──────────────────────────────────────────────────────────────
+// Render
+// ──────────────────────────────────────────────────────────────
+
+function getProgress(section) {
+  const total = section.items.length;
+  const done  = section.items.filter(i => checks[i.id]).length;
+  return { total, done, pct: total > 0 ? done/total : 0 };
+}
+
+function getTotalProgress() {
+  const allItems = PLAYBOOK.flatMap(s => s.items);
+  const done = allItems.filter(i => checks[i.id]).length;
+  return { total: allItems.length, done, pct: allItems.length > 0 ? done/allItems.length : 0 };
+}
+
+function renderProgress() {
+  const { total, done, pct } = getTotalProgress();
+  document.getElementById('overall-fill').style.width = (pct*100).toFixed(1)+'%';
+  document.getElementById('overall-pct').textContent = Math.round(pct*100)+'%';
+  document.getElementById('header-stats').textContent = `${done} / ${total} complete`;
+
+  const allDone = done === total;
+  document.getElementById('done-banner').classList.toggle('show', allDone);
+}
+
+function renderSidebar() {
+  const nav = document.getElementById('sidebar-nav'); nav.innerHTML='';
+  PLAYBOOK.forEach(section => {
+    const {done,total,pct} = getProgress(section);
+    const isAllDone = done === total;
+    const isPartial = done > 0 && !isAllDone;
+    const item = document.createElement('a');
+    item.className = `nav-item${isAllDone?' completed':isPartial?' partial':''}`;
+    item.href = `#${section.id}`;
+    item.innerHTML = `
+      <span class="nav-icon">${isAllDone?'✅':section.icon}</span>
+      <span class="nav-title">${section.title}</span>
+      <span class="nav-count">${done}/${total}</span>
+    `;
+    nav.appendChild(item);
+  });
+}
+
+function updateSectionProgress(sectionId, section) {
+  const { done, total } = getProgress(section);
+  const pill = document.getElementById(`pill-${sectionId}`);
+  if (!pill) return;
+  pill.textContent = `${done}/${total}`;
+  const allDone = done===total; const partial = done>0&&!allDone;
+  pill.className = `section-progress-pill${allDone?' done':partial?' partial':''}`;
+  const card = document.getElementById(sectionId);
+  if (card) card.classList.toggle('all-done', allDone);
+}
+
+function copyCode(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
+function buildAll() {
+  const main = document.getElementById('main-content');
+  // Keep done banner
+  const banner = document.getElementById('done-banner');
+  main.innerHTML = '';
+  main.appendChild(banner);
+
+  PLAYBOOK.forEach(section => {
+    const card = document.createElement('div');
+    card.className = 'section-card';
+    card.id = section.id;
+    const { done, total } = getProgress(section);
+    const allDone = done===total; const partial = done>0&&!allDone;
+
+    card.innerHTML = `
+      <div class="section-header" onclick="toggleSection('${section.id}')">
+        <span class="section-icon">${section.icon}</span>
+        <div style="flex:1">
+          <div class="section-title">${section.title}</div>
+          <div class="section-meta">${section.meta}</div>
+        </div>
+        <span class="section-progress-pill${allDone?' done':partial?' partial':''}" id="pill-${section.id}">${done}/${total}</span>
+        <span style="font-size:14px;color:var(--muted);margin-left:8px" id="arrow-${section.id}">▾</span>
+      </div>
+      <div class="section-body" id="body-${section.id}">
+        ${section.items.map(item => buildItemHTML(item)).join('')}
+      </div>
+    `;
+    main.appendChild(card);
+  });
+
+  // Apply saved checks
+  PLAYBOOK.flatMap(s=>s.items).forEach(item => {
+    if (checks[item.id]) {
+      const el = document.getElementById(`item-${item.id}`);
+      if (el) el.classList.add('checked');
+    }
+  });
+
+  renderSidebar();
+  renderProgress();
+}
+
+function buildItemHTML(item) {
+  const isChecked = !!checks[item.id];
+  const codeBlock = item.code ? `
+    <div class="code-snippet">${escapeHTML(item.code)}<button class="copy-code-btn" onclick="event.stopPropagation();copyCode(this,\`${item.code.replace(/`/g,'\\`').replace(/\\/g,'\\\\')}\`)">Copy</button></div>` : '';
+  const linkBlock = item.link ? `<a class="check-link" href="${item.link.url}" target="_blank">${item.link.label} ↗</a>` : '';
+  const tagsBlock = item.tags ? `<div class="check-tags">${item.tags.map(t=>`<span class="check-tag" style="background:${t.bg};color:${t.color}">${t.label}</span>`).join('')}</div>` : '';
+
+  return `<div class="check-item${isChecked?' checked':''}" id="item-${item.id}" onclick="toggleCheck('${item.id}')">
+    <div class="check-box"><span class="check-box-tick">✓</span></div>
+    <div class="check-content">
+      <div class="check-title">${item.title}</div>
+      <div class="check-desc">${item.desc}${codeBlock}${linkBlock}${tagsBlock}</div>
+    </div>
+  </div>`;
+}
+
+function escapeHTML(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleSection(id) {
+  const body = document.getElementById(`body-${id}`);
+  const arrow = document.getElementById(`arrow-${id}`);
+  if (!body) return;
+  const isHidden = body.style.display === 'none';
+  body.style.display = isHidden ? '' : 'none';
+  if (arrow) arrow.textContent = isHidden ? '▾' : '▸';
+}
+
+// ── Toast ──
+let toastT;
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
+
+// ── Init ──
+buildAll();
+</script>
+</body>
+</html>

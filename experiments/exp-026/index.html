@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GripperSimulator — Interactive 2D Gripper Physics</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--card:#1a1a1a;--border:#252525;--fg:#e5e5e7;--dim:#86868b;
+  --accent:#2997ff;--green:#30d158;--red:#ff453a;--yellow:#ffd60a;--purple:#bf5af2;--orange:#ff9f0a}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+header h1{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--accent)}
+
+.main{flex:1;display:flex;overflow:hidden}
+
+/* Canvas Area */
+.canvas-area{flex:1;display:flex;align-items:center;justify-content:center;background:#050508;position:relative}
+#simCanvas{display:block}
+
+/* Sidebar */
+.sidebar{width:320px;background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
+.sidebar::-webkit-scrollbar{width:6px}
+.sidebar::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+
+.panel{padding:16px;border-bottom:1px solid var(--border)}
+.panel-title{font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* Controls */
+.ctrl-group{margin-bottom:12px}
+.ctrl-label{font-size:.75rem;color:var(--dim);margin-bottom:4px;display:flex;justify-content:space-between}
+.ctrl-label .val{color:var(--fg);font-variant-numeric:tabular-nums;font-weight:500}
+input[type=range]{width:100%;-webkit-appearance:none;height:6px;background:#333;border-radius:3px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer}
+
+.btn{padding:6px 14px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.78rem;font-family:inherit;transition:all .15s}
+.btn:hover{border-color:var(--accent)}
+.btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.green{border-color:var(--green);color:var(--green)}
+.btn.green:hover{background:var(--green);color:#fff}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Telemetry */
+.telem-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.telem-item{background:rgba(255,255,255,.03);padding:8px 10px;border-radius:6px}
+.telem-label{font-size:.65rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.telem-value{font-size:1rem;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+
+/* Waypoints */
+.wp-list{max-height:160px;overflow-y:auto;margin-top:8px}
+.wp-item{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;font-size:.75rem;font-variant-numeric:tabular-nums;margin-bottom:2px}
+.wp-item:nth-child(even){background:rgba(255,255,255,.02)}
+.wp-dot{width:8px;height:8px;border-radius:50%}
+.wp-active{background:rgba(41,151,255,.1);border:1px solid var(--accent)}
+
+/* Status */
+.status-bar{padding:8px 20px;background:var(--surface);border-top:1px solid var(--border);font-size:.72rem;color:var(--dim);display:flex;gap:20px;flex-shrink:0}
+.status-bar .indicator{display:flex;align-items:center;gap:4px}
+.status-bar .dot{width:6px;height:6px;border-radius:50%}
+
+/* Object palette */
+.obj-palette{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.obj-btn{padding:4px 10px;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer;font-size:.75rem;font-family:inherit;transition:all .15s}
+.obj-btn:hover{border-color:var(--accent)}
+.obj-btn.selected{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🦾 <span>GripperSimulator</span></h1>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span style="font-size:.78rem;color:var(--dim)">Dynamixel XL430 · WidowX 250s</span>
+  </div>
+</header>
+
+<div class="main">
+  <div class="canvas-area"><canvas id="simCanvas"></canvas></div>
+  <div class="sidebar">
+    <!-- Gripper Control -->
+    <div class="panel">
+      <div class="panel-title">🤖 Gripper Control</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Position <span class="val" id="posVal">0.250 rad</span></div>
+        <input type="range" id="posSlider" min="-75" max="500" value="250" step="1" oninput="setGripperPos(this.value/1000)">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Range: -0.075 (max squeeze) → 0.5 (full open)</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="setGripperPos(0.5)">Full Open</button>
+        <button class="btn" onclick="setGripperPos(0.0)">Closed</button>
+        <button class="btn" onclick="setGripperPos(-0.075)">Max Squeeze</button>
+      </div>
+    </div>
+
+    <!-- Objects -->
+    <div class="panel">
+      <div class="panel-title">📦 Workspace Objects</div>
+      <div class="btn-row">
+        <button class="btn green" onclick="addObject('cube')">+ Cube</button>
+        <button class="btn green" onclick="addObject('sphere')">+ Sphere</button>
+        <button class="btn green" onclick="addObject('cylinder')">+ Cylinder</button>
+        <button class="btn" onclick="clearObjects()">Clear All</button>
+      </div>
+      <div style="font-size:.7rem;color:var(--dim);margin-top:8px">Click canvas to place. Drag objects to move.</div>
+    </div>
+
+    <!-- Telemetry -->
+    <div class="panel">
+      <div class="panel-title">📊 Telemetry</div>
+      <div class="telem-grid">
+        <div class="telem-item">
+          <div class="telem-label">Position</div>
+          <div class="telem-value" id="telemPos">0.250</div>
+        </div>
+        <div class="telem-item">
+          <div class="telem-label">Width (mm)</div>
+          <div class="telem-value" id="telemWidth">—</div>
+        </div>
+        <div class="telem-item">
+          <div class="telem-label">Force (N)</div>
+          <div class="telem-value" id="telemForce">0.0</div>
+        </div>
+        <div class="telem-item">
+          <div class="telem-label">Contact</div>
+          <div class="telem-value" id="telemContact" style="color:var(--dim)">None</div>
+        </div>
+        <div class="telem-item">
+          <div class="telem-label">Velocity</div>
+          <div class="telem-value" id="telemVel">0.00</div>
+        </div>
+        <div class="telem-item">
+          <div class="telem-label">Grasped</div>
+          <div class="telem-value" id="telemGrasped" style="color:var(--dim)">No</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trajectory Playback -->
+    <div class="panel">
+      <div class="panel-title">🎬 Trajectory Playback</div>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button class="btn" id="trajPlayBtn" onclick="playTrajectory()">▶ Play</button>
+        <button class="btn" onclick="loadDemoTrajectory()">Load Demo</button>
+        <button class="btn" onclick="clearTrajectory()">Clear</button>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Speed <span class="val" id="trajSpeedVal">1.0×</span></div>
+        <input type="range" id="trajSpeed" min="1" max="50" value="10" oninput="document.getElementById('trajSpeedVal').textContent=(this.value/10).toFixed(1)+'×'">
+      </div>
+      <div class="wp-list" id="wpList">
+        <div style="font-size:.75rem;color:var(--dim);padding:8px;text-align:center">No trajectory loaded</div>
+      </div>
+    </div>
+
+    <!-- Presets -->
+    <div class="panel">
+      <div class="panel-title">⚡ Quick Actions</div>
+      <div class="btn-row">
+        <button class="btn" onclick="demoPickAndPlace()">Pick & Place</button>
+        <button class="btn" onclick="demoOpenClose()">Open/Close Cycle</button>
+        <button class="btn" onclick="demoSweep()">Position Sweep</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span class="indicator"><span class="dot" style="background:var(--green)"></span> Simulation Active</span>
+  <span class="indicator">60 FPS</span>
+  <span class="indicator" id="statusObjects">0 objects</span>
+  <span class="indicator" id="statusTraj">No trajectory</span>
+</div>
+
+<script>
+/* ═══ Constants ═══ */
+const GRIPPER_MIN = -0.075; // max squeeze
+const GRIPPER_MAX = 0.5;    // full open
+const RAD_TO_MM = 85;       // rough mm per rad for visualization
+const FINGER_LENGTH = 60;
+const FINGER_WIDTH = 12;
+const BASE_WIDTH = 50;
+const BASE_HEIGHT = 30;
+const GRAVITY = 200; // px/s²
+
+/* ═══ State ═══ */
+let gripperPos = 0.25;      // current position in rad
+let gripperTarget = 0.25;   // target position
+let gripperVel = 0;
+let objects = [];
+let dragging = null;
+let dragOffset = { x: 0, y: 0 };
+let placingObject = null;
+let trajectory = [];
+let trajPlaying = false;
+let trajStartTime = 0;
+let trajIdx = 0;
+let contactForce = 0;
+let graspedObj = null;
+
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+/* ═══ Canvas Setup ═══ */
+function resize() {
+  const area = canvas.parentElement;
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ═══ Coordinate System ═══ */
+function getGripperCenter() {
+  return { x: canvas.width / 2, y: canvas.height * 0.35 };
+}
+
+function getGripperWidth() {
+  return gripperPos * RAD_TO_MM * 2; // total opening in px
+}
+
+function getFingerPositions() {
+  const center = getGripperCenter();
+  const halfW = getGripperWidth() / 2;
+  return {
+    left: { x: center.x - halfW - FINGER_WIDTH/2, y: center.y },
+    right: { x: center.x + halfW + FINGER_WIDTH/2, y: center.y },
+    center
+  };
+}
+
+/* ═══ Object Physics ═══ */
+function addObject(type) {
+  placingObject = type;
+  canvas.style.cursor = 'crosshair';
+}
+
+function createObject(type, x, y) {
+  const colors = ['#e74c3c','#2ecc71','#3498db','#f39c12','#9b59b6','#1abc9c'];
+  const obj = {
+    type, x, y,
+    vx: 0, vy: 0,
+    color: colors[objects.length % colors.length],
+    id: 'obj_' + Date.now(),
+    grasped: false
+  };
+  if(type === 'cube') { obj.w = 30 + Math.random()*15; obj.h = 30 + Math.random()*15; }
+  else if(type === 'sphere') { obj.r = 15 + Math.random()*10; }
+  else if(type === 'cylinder') { obj.w = 20 + Math.random()*10; obj.h = 35 + Math.random()*15; }
+  objects.push(obj);
+  updateStatusObjects();
+}
+
+function clearObjects() { objects = []; graspedObj = null; updateStatusObjects(); }
+function updateStatusObjects() { document.getElementById('statusObjects').textContent = objects.length + ' objects'; }
+
+/* ═══ Drawing ═══ */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Background grid
+  ctx.strokeStyle = 'rgba(255,255,255,.03)';
+  ctx.lineWidth = 1;
+  for(let x = 0; x < canvas.width; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for(let y = 0; y < canvas.height; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+  
+  // Table surface
+  const tableY = canvas.height * 0.65;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, tableY, canvas.width, canvas.height - tableY);
+  ctx.strokeStyle = '#2a2a4e';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, tableY); ctx.lineTo(canvas.width, tableY); ctx.stroke();
+  
+  // Target zone (dashed)
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = 'rgba(255,159,10,.3)';
+  ctx.strokeRect(canvas.width * 0.65, tableY + 20, 100, 80);
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,159,10,.05)';
+  ctx.fillRect(canvas.width * 0.65, tableY + 20, 100, 80);
+  ctx.fillStyle = 'rgba(255,159,10,.3)';
+  ctx.font = '10px -apple-system,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('TARGET ZONE', canvas.width * 0.65 + 50, tableY + 65);
+  
+  // Draw objects
+  objects.forEach(obj => drawObject(obj, tableY));
+  
+  // Draw gripper
+  drawGripper();
+  
+  // Draw arm connection
+  const center = getGripperCenter();
+  const armGrad = ctx.createLinearGradient(center.x, 0, center.x, center.y - BASE_HEIGHT);
+  armGrad.addColorStop(0, 'rgba(100,100,120,.1)');
+  armGrad.addColorStop(1, 'rgba(100,100,120,.4)');
+  ctx.fillStyle = armGrad;
+  ctx.fillRect(center.x - 8, 0, 16, center.y - BASE_HEIGHT);
+  
+  // Draw force indicator
+  if(contactForce > 0) {
+    const fp = getFingerPositions();
+    const forceColor = contactForce > 5 ? '#ff453a' : contactForce > 2 ? '#ffd60a' : '#30d158';
+    ctx.fillStyle = forceColor;
+    ctx.globalAlpha = 0.3;
+    const forceW = Math.min(contactForce * 3, 20);
+    ctx.fillRect(fp.left.x + FINGER_WIDTH/2, fp.center.y - 5, forceW, 10);
+    ctx.fillRect(fp.right.x - FINGER_WIDTH/2 - forceW, fp.center.y - 5, forceW, 10);
+    ctx.globalAlpha = 1;
+  }
+  
+  // Position scale
+  drawScale();
+}
+
+function drawGripper() {
+  const fp = getFingerPositions();
+  const { center } = fp;
+  
+  // Base
+  const baseGrad = ctx.createLinearGradient(0, center.y - BASE_HEIGHT, 0, center.y);
+  baseGrad.addColorStop(0, '#4a4a5e');
+  baseGrad.addColorStop(1, '#3a3a4e');
+  ctx.fillStyle = baseGrad;
+  ctx.beginPath();
+  ctx.roundRect(center.x - BASE_WIDTH/2, center.y - BASE_HEIGHT, BASE_WIDTH, BASE_HEIGHT, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#5a5a6e';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Left finger
+  drawFinger(fp.left.x - FINGER_WIDTH/2, center.y, FINGER_WIDTH, FINGER_LENGTH, '#555568', '#65657a');
+  
+  // Right finger
+  drawFinger(fp.right.x - FINGER_WIDTH/2, center.y, FINGER_WIDTH, FINGER_LENGTH, '#555568', '#65657a');
+  
+  // Connection rails
+  ctx.strokeStyle = '#4a4a5e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(center.x - BASE_WIDTH/2 + 5, center.y + 5);
+  ctx.lineTo(fp.left.x + FINGER_WIDTH/2, center.y + 5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(center.x + BASE_WIDTH/2 - 5, center.y + 5);
+  ctx.lineTo(fp.right.x - FINGER_WIDTH/2, center.y + 5);
+  ctx.stroke();
+  
+  // Width indicator
+  const halfW = getGripperWidth() / 2;
+  if(halfW > 5) {
+    ctx.strokeStyle = 'rgba(41,151,255,.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    const iy = center.y + FINGER_LENGTH + 15;
+    ctx.beginPath();
+    ctx.moveTo(fp.left.x + FINGER_WIDTH, iy);
+    ctx.lineTo(fp.right.x, iy);
+    ctx.stroke();
+    // Arrows
+    ctx.beginPath(); ctx.moveTo(fp.left.x + FINGER_WIDTH, iy - 4); ctx.lineTo(fp.left.x + FINGER_WIDTH, iy + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(fp.right.x, iy - 4); ctx.lineTo(fp.right.x, iy + 4); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(41,151,255,.6)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${(gripperPos * RAD_TO_MM).toFixed(1)} mm`, center.x, iy - 6);
+  }
+}
+
+function drawFinger(x, y, w, h, color1, color2) {
+  const g = ctx.createLinearGradient(x, y, x + w, y);
+  g.addColorStop(0, color1); g.addColorStop(1, color2);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, [0, 0, 3, 3]);
+  ctx.fill();
+  ctx.strokeStyle = '#6a6a7e';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Grip texture
+  ctx.fillStyle = 'rgba(0,0,0,.2)';
+  for(let i = 0; i < 4; i++) {
+    ctx.fillRect(x + 2, y + 15 + i * 12, w - 4, 2);
+  }
+}
+
+function drawObject(obj, tableY) {
+  ctx.save();
+  const objBottom = obj.type === 'sphere' ? obj.y + obj.r : obj.y + obj.h;
+  
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  if(obj.type === 'sphere') {
+    ctx.beginPath();
+    ctx.ellipse(obj.x, Math.min(tableY, objBottom + 3), obj.r * 0.8, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillRect(obj.x - obj.w/2 + 3, Math.min(tableY - 2, objBottom), obj.w - 6, 4);
+  }
+  
+  if(obj.type === 'cube') {
+    const g = ctx.createLinearGradient(obj.x - obj.w/2, obj.y, obj.x + obj.w/2, obj.y + obj.h);
+    g.addColorStop(0, obj.color); g.addColorStop(1, adjustColor(obj.color, -30));
+    ctx.fillStyle = g;
+    ctx.fillRect(obj.x - obj.w/2, obj.y, obj.w, obj.h);
+    ctx.strokeStyle = adjustColor(obj.color, -50);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(obj.x - obj.w/2, obj.y, obj.w, obj.h);
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,.1)';
+    ctx.fillRect(obj.x - obj.w/2, obj.y, obj.w, 4);
+  } else if(obj.type === 'sphere') {
+    const sg = ctx.createRadialGradient(obj.x - 4, obj.y - 4, 2, obj.x, obj.y, obj.r);
+    sg.addColorStop(0, adjustColor(obj.color, 40));
+    sg.addColorStop(1, adjustColor(obj.color, -30));
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = adjustColor(obj.color, -50);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if(obj.type === 'cylinder') {
+    ctx.fillStyle = adjustColor(obj.color, -20);
+    ctx.fillRect(obj.x - obj.w/2, obj.y, obj.w, obj.h);
+    // Top ellipse
+    ctx.fillStyle = obj.color;
+    ctx.beginPath(); ctx.ellipse(obj.x, obj.y, obj.w/2, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = adjustColor(obj.color, -50);
+    ctx.stroke();
+    // Side edges
+    ctx.strokeStyle = adjustColor(obj.color, -40);
+    ctx.beginPath(); ctx.moveTo(obj.x - obj.w/2, obj.y); ctx.lineTo(obj.x - obj.w/2, obj.y + obj.h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(obj.x + obj.w/2, obj.y); ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h); ctx.stroke();
+    // Bottom ellipse
+    ctx.beginPath(); ctx.ellipse(obj.x, obj.y + obj.h, obj.w/2, 6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = adjustColor(obj.color, -30); ctx.fill();
+    ctx.strokeStyle = adjustColor(obj.color, -50); ctx.stroke();
+  }
+  
+  // Grasped indicator
+  if(obj.grasped) {
+    ctx.strokeStyle = 'var(--accent)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    if(obj.type === 'sphere') {
+      ctx.beginPath(); ctx.arc(obj.x, obj.y, obj.r + 5, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      ctx.strokeRect(obj.x - obj.w/2 - 3, obj.y - 3, obj.w + 6, obj.h + 6);
+    }
+    ctx.setLineDash([]);
+  }
+  
+  ctx.restore();
+}
+
+function drawScale() {
+  const x = 30, y = canvas.height * 0.15;
+  const h = canvas.height * 0.4;
+  ctx.fillStyle = 'rgba(255,255,255,.03)';
+  ctx.fillRect(x - 2, y, 24, h);
+  ctx.strokeStyle = 'rgba(255,255,255,.1)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 2, y, 24, h);
+  
+  // Scale markings
+  const steps = [0.5, 0.4, 0.3, 0.2, 0.1, 0.0, -0.075];
+  steps.forEach(val => {
+    const pct = 1 - (val - GRIPPER_MIN) / (GRIPPER_MAX - GRIPPER_MIN);
+    const sy = y + pct * h;
+    ctx.strokeStyle = 'rgba(255,255,255,.15)';
+    ctx.beginPath(); ctx.moveTo(x, sy); ctx.lineTo(x + 20, sy); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.4)';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(val.toFixed(2), x + 26, sy + 3);
+  });
+  
+  // Current position indicator
+  const curPct = 1 - (gripperPos - GRIPPER_MIN) / (GRIPPER_MAX - GRIPPER_MIN);
+  const curY = y + curPct * h;
+  ctx.fillStyle = '#2997ff';
+  ctx.beginPath();
+  ctx.moveTo(x - 2, curY - 5); ctx.lineTo(x + 22, curY - 5);
+  ctx.lineTo(x + 22, curY + 5); ctx.lineTo(x - 2, curY + 5);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(gripperPos.toFixed(3), x + 10, curY + 3);
+}
+
+function adjustColor(hex, amt) {
+  let r = parseInt(hex.slice(1,3),16) + amt;
+  let g = parseInt(hex.slice(3,5),16) + amt;
+  let b = parseInt(hex.slice(5,7),16) + amt;
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+/* ═══ Physics ═══ */
+function updatePhysics(dt) {
+  // Gripper spring towards target
+  const diff = gripperTarget - gripperPos;
+  gripperVel += diff * 15 * dt;
+  gripperVel *= 0.85; // damping
+  gripperPos += gripperVel * dt;
+  gripperPos = Math.max(GRIPPER_MIN, Math.min(GRIPPER_MAX, gripperPos));
+  
+  const fp = getFingerPositions();
+  const tableY = canvas.height * 0.65;
+  contactForce = 0;
+  
+  objects.forEach(obj => {
+    if(obj.grasped) {
+      // Move with gripper
+      obj.x = fp.center.x;
+      obj.y = fp.center.y + FINGER_LENGTH / 2;
+      obj.vx = 0; obj.vy = 0;
+      return;
+    }
+    
+    // Gravity
+    obj.vy += GRAVITY * dt;
+    obj.x += obj.vx * dt;
+    obj.y += obj.vy * dt;
+    
+    // Floor collision
+    const objBottom = obj.type === 'sphere' ? obj.y + obj.r : obj.y + (obj.h || 0);
+    if(objBottom > tableY) {
+      if(obj.type === 'sphere') obj.y = tableY - obj.r;
+      else obj.y = tableY - obj.h;
+      obj.vy *= -0.3;
+      if(Math.abs(obj.vy) < 5) obj.vy = 0;
+      obj.vx *= 0.9;
+    }
+    
+    // Wall collision
+    const objLeft = obj.type === 'sphere' ? obj.x - obj.r : obj.x - obj.w/2;
+    const objRight = obj.type === 'sphere' ? obj.x + obj.r : obj.x + obj.w/2;
+    if(objLeft < 0) { obj.x = obj.type === 'sphere' ? obj.r : obj.w/2; obj.vx *= -0.5; }
+    if(objRight > canvas.width) { obj.x = obj.type === 'sphere' ? canvas.width - obj.r : canvas.width - obj.w/2; obj.vx *= -0.5; }
+    
+    // Gripper collision
+    checkGripperCollision(obj, fp, tableY);
+  });
+  
+  // Check for grasp
+  checkGrasp(fp);
+}
+
+function checkGripperCollision(obj, fp, tableY) {
+  const fingerTop = fp.center.y;
+  const fingerBottom = fp.center.y + FINGER_LENGTH;
+  const leftInner = fp.left.x + FINGER_WIDTH;
+  const rightInner = fp.right.x - FINGER_WIDTH;
+  
+  let objLeft, objRight, objTop, objBottom;
+  if(obj.type === 'sphere') {
+    objLeft = obj.x - obj.r; objRight = obj.x + obj.r;
+    objTop = obj.y - obj.r; objBottom = obj.y + obj.r;
+  } else {
+    objLeft = obj.x - obj.w/2; objRight = obj.x + obj.w/2;
+    objTop = obj.y; objBottom = obj.y + obj.h;
+  }
+  
+  // Check if object is between fingers vertically
+  if(objBottom > fingerTop && objTop < fingerBottom) {
+    // Left finger push
+    if(objLeft < leftInner && objRight > fp.left.x) {
+      obj.x = leftInner + (obj.type === 'sphere' ? obj.r : obj.w/2) + 1;
+      obj.vx = Math.max(obj.vx, 0);
+      contactForce += 2;
+    }
+    // Right finger push
+    if(objRight > rightInner && objLeft < fp.right.x) {
+      obj.x = rightInner - (obj.type === 'sphere' ? obj.r : obj.w/2) - 1;
+      obj.vx = Math.min(obj.vx, 0);
+      contactForce += 2;
+    }
+  }
+}
+
+function checkGrasp(fp) {
+  const leftInner = fp.left.x + FINGER_WIDTH;
+  const rightInner = fp.right.x - FINGER_WIDTH;
+  const fingerTop = fp.center.y;
+  const fingerBottom = fp.center.y + FINGER_LENGTH;
+  const gap = rightInner - leftInner;
+  
+  // Release if opening wide
+  if(graspedObj && gap > (graspedObj.type === 'sphere' ? graspedObj.r * 2 + 10 : graspedObj.w + 10)) {
+    graspedObj.grasped = false;
+    graspedObj = null;
+  }
+  
+  if(graspedObj) return;
+  
+  objects.forEach(obj => {
+    if(obj.grasped) return;
+    let objW = obj.type === 'sphere' ? obj.r * 2 : obj.w;
+    let objCx = obj.x;
+    let objTop = obj.type === 'sphere' ? obj.y - obj.r : obj.y;
+    let objBottom = obj.type === 'sphere' ? obj.y + obj.r : obj.y + obj.h;
+    
+    // Object must be between fingers and gap must be small enough
+    if(objCx > leftInner && objCx < rightInner && objBottom > fingerTop && objTop < fingerBottom) {
+      if(gap < objW + 4 && gap > objW - 8) {
+        obj.grasped = true;
+        graspedObj = obj;
+        contactForce = 3;
+      }
+    }
+  });
+}
+
+/* ═══ Input ═══ */
+function setGripperPos(val) {
+  gripperTarget = parseFloat(val);
+  document.getElementById('posSlider').value = val * 1000;
+  document.getElementById('posVal').textContent = val.toFixed(3) + ' rad';
+}
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  
+  if(placingObject) {
+    createObject(placingObject, mx, my);
+    placingObject = null;
+    canvas.style.cursor = 'default';
+    return;
+  }
+  
+  // Check drag on objects
+  for(let i = objects.length - 1; i >= 0; i--) {
+    const obj = objects[i];
+    let hit = false;
+    if(obj.type === 'sphere') hit = Math.hypot(mx - obj.x, my - obj.y) < obj.r + 5;
+    else hit = mx > obj.x - obj.w/2 - 5 && mx < obj.x + obj.w/2 + 5 && my > obj.y - 5 && my < obj.y + obj.h + 5;
+    if(hit) {
+      dragging = obj;
+      if(obj.grasped) { obj.grasped = false; graspedObj = null; }
+      dragOffset = { x: mx - obj.x, y: my - obj.y };
+      break;
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if(!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  dragging.x = e.clientX - rect.left - dragOffset.x;
+  dragging.y = e.clientY - rect.top - dragOffset.y;
+  dragging.vx = 0; dragging.vy = 0;
+});
+
+canvas.addEventListener('mouseup', () => { dragging = null; });
+
+/* ═══ Trajectory ═══ */
+function loadDemoTrajectory() {
+  trajectory = [
+    { t: 0.0, pos: 0.5 },
+    { t: 0.5, pos: 0.5 },
+    { t: 1.0, pos: 0.15 },  // close to grasp
+    { t: 1.5, pos: 0.05 },  // squeeze
+    { t: 2.0, pos: 0.05 },  // hold
+    { t: 3.0, pos: 0.05 },  // hold while moving
+    { t: 3.5, pos: 0.3 },   // release
+    { t: 4.0, pos: 0.5 },   // full open
+  ];
+  renderWaypoints();
+  document.getElementById('statusTraj').textContent = `${trajectory.length} waypoints loaded`;
+}
+
+function clearTrajectory() {
+  trajectory = [];
+  trajPlaying = false;
+  renderWaypoints();
+  document.getElementById('statusTraj').textContent = 'No trajectory';
+  document.getElementById('trajPlayBtn').textContent = '▶ Play';
+}
+
+function playTrajectory() {
+  if(trajectory.length === 0) { loadDemoTrajectory(); }
+  if(trajPlaying) {
+    trajPlaying = false;
+    document.getElementById('trajPlayBtn').textContent = '▶ Play';
+    return;
+  }
+  trajPlaying = true;
+  trajStartTime = performance.now() / 1000;
+  document.getElementById('trajPlayBtn').textContent = '⏸ Pause';
+}
+
+function updateTrajectory() {
+  if(!trajPlaying || trajectory.length < 2) return;
+  const speed = parseInt(document.getElementById('trajSpeed').value) / 10;
+  const t = (performance.now() / 1000 - trajStartTime) * speed;
+  const maxT = trajectory[trajectory.length - 1].t;
+  
+  if(t > maxT) {
+    trajPlaying = false;
+    document.getElementById('trajPlayBtn').textContent = '▶ Play';
+    return;
+  }
+  
+  // Interpolate
+  let pos = trajectory[0].pos;
+  for(let i = 0; i < trajectory.length - 1; i++) {
+    if(t >= trajectory[i].t && t <= trajectory[i+1].t) {
+      const frac = (t - trajectory[i].t) / (trajectory[i+1].t - trajectory[i].t);
+      pos = trajectory[i].pos + frac * (trajectory[i+1].pos - trajectory[i].pos);
+      trajIdx = i;
+      break;
+    }
+    if(t > trajectory[i+1].t) { pos = trajectory[i+1].pos; trajIdx = i+1; }
+  }
+  
+  setGripperPos(pos);
+  renderWaypoints();
+}
+
+function renderWaypoints() {
+  const list = document.getElementById('wpList');
+  if(trajectory.length === 0) {
+    list.innerHTML = '<div style="font-size:.75rem;color:var(--dim);padding:8px;text-align:center">No trajectory loaded</div>';
+    return;
+  }
+  list.innerHTML = trajectory.map((wp, i) => `
+    <div class="wp-item ${i === trajIdx && trajPlaying ? 'wp-active' : ''}">
+      <div class="wp-dot" style="background:${i <= trajIdx && trajPlaying ? '#2997ff' : '#333'}"></div>
+      <span style="color:var(--dim)">t=${wp.t.toFixed(1)}s</span>
+      <span style="flex:1">${wp.pos.toFixed(3)} rad</span>
+      <span style="color:var(--dim)">${(wp.pos * RAD_TO_MM).toFixed(0)}mm</span>
+    </div>
+  `).join('');
+}
+
+/* ═══ Demo Sequences ═══ */
+function demoPickAndPlace() {
+  clearObjects();
+  createObject('cube', canvas.width/2, canvas.height * 0.5);
+  trajectory = [
+    { t: 0.0, pos: 0.5 },
+    { t: 0.8, pos: 0.3 },
+    { t: 1.5, pos: 0.08 },
+    { t: 2.0, pos: 0.03 },
+    { t: 3.5, pos: 0.03 },
+    { t: 4.0, pos: 0.4 },
+    { t: 4.5, pos: 0.5 },
+  ];
+  renderWaypoints();
+  playTrajectory();
+}
+
+function demoOpenClose() {
+  trajectory = [];
+  for(let i = 0; i < 6; i++) {
+    trajectory.push({ t: i * 0.8, pos: i % 2 === 0 ? 0.5 : 0.0 });
+  }
+  renderWaypoints();
+  playTrajectory();
+}
+
+function demoSweep() {
+  trajectory = [];
+  for(let i = 0; i <= 20; i++) {
+    const t = i * 0.3;
+    const pos = GRIPPER_MIN + (GRIPPER_MAX - GRIPPER_MIN) * (0.5 + 0.5 * Math.sin(i * 0.5));
+    trajectory.push({ t, pos });
+  }
+  renderWaypoints();
+  playTrajectory();
+}
+
+/* ═══ Telemetry Update ═══ */
+function updateTelemetry() {
+  document.getElementById('telemPos').textContent = gripperPos.toFixed(3);
+  document.getElementById('telemWidth').textContent = (gripperPos * RAD_TO_MM).toFixed(1);
+  document.getElementById('telemForce').textContent = contactForce.toFixed(1);
+  document.getElementById('telemVel').textContent = Math.abs(gripperVel).toFixed(2);
+  
+  const contactEl = document.getElementById('telemContact');
+  if(contactForce > 0) {
+    contactEl.textContent = 'Active';
+    contactEl.style.color = contactForce > 5 ? 'var(--red)' : 'var(--yellow)';
+  } else {
+    contactEl.textContent = 'None';
+    contactEl.style.color = 'var(--dim)';
+  }
+  
+  const graspEl = document.getElementById('telemGrasped');
+  if(graspedObj) {
+    graspEl.textContent = 'Yes';
+    graspEl.style.color = 'var(--green)';
+  } else {
+    graspEl.textContent = 'No';
+    graspEl.style.color = 'var(--dim)';
+  }
+}
+
+/* ═══ Main Loop ═══ */
+let lastTime = performance.now();
+function loop() {
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  
+  updateTrajectory();
+  updatePhysics(dt);
+  draw();
+  updateTelemetry();
+  
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

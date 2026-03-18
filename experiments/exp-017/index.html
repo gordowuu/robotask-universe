@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwagScore v2 — Robot Eval with Compare Mode</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a; --surf: #111114; --surf2: #18181c; --surf3: #1f1f26;
+      --border: #222228; --brd2: #2a2a33; --text: #e8e8f0; --muted: #666674;
+      --accent: #7c6cfc; --acc2: #5a4de0; --green: #3ecf8e; --amber: #f5c842;
+      --red: #f05252; --cyan: #22d3ee; --r: 10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Header ── */
+    header {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(10,10,10,0.94); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .logo { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+    .logo span { color: var(--accent); }
+    .logo sup { font-size: 10px; background: var(--accent); color: #fff; padding: 1px 4px; border-radius: 3px; vertical-align: super; }
+    .hdr-spacer { flex: 1; }
+
+    /* Progress */
+    .progress-bar-wrap { background: var(--surf2); border-bottom: 1px solid var(--border); height: 3px; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a78bfa); transition: width 0.4s ease; }
+
+    /* ── Tabs ── */
+    .tab-bar { background: var(--surf); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; overflow-x: auto; }
+    .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.14s; white-space: nowrap; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: #fff; border-bottom-color: var(--accent); }
+    .tab .tab-count { background: var(--surf2); border: 1px solid var(--brd2); font-size: 10px; padding: 1px 5px; border-radius: 10px; margin-left: 5px; }
+
+    .view { display: none; padding: 24px; }
+    .view.active { display: block; }
+
+    /* ── Rating view ── */
+    .rate-grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; max-width: 1200px; margin: 0 auto; }
+
+    /* Video + controls */
+    .video-wrap { background: #000; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; aspect-ratio: 16/9; position: relative; }
+    .video-wrap video { width: 100%; height: 100%; object-fit: contain; }
+    .video-meta { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 16px; margin-top: 10px; }
+    .video-meta h2 { font-size: 14px; font-weight: 700; color: #fff; }
+    .video-meta p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Scrubber */
+    .scr-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .scr-t { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
+    input[type=range].vid-scrubber {
+      flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px;
+      outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct,0%), var(--brd2) var(--pct,0%), var(--brd2) 100%);
+    }
+    input[type=range].vid-scrubber::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+
+    .pb-row { display: flex; gap: 5px; align-items: center; margin-top: 6px; }
+    .pb-btn { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.12s; }
+    .pb-btn:hover { background: var(--surf3); }
+    .pb-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pb-spacer { flex: 1; }
+
+    /* Rating panel */
+    .rate-panel { display: flex; flex-direction: column; gap: 12px; }
+    .panel-card { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; }
+    .panel-card h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
+
+    /* Sliders */
+    .dim-row { margin-bottom: 12px; }
+    .dim-row:last-child { margin-bottom: 0; }
+    .dim-hdr { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 3px; }
+    .dim-name { font-size: 13px; font-weight: 600; }
+    .dim-desc { font-size: 11px; color: var(--muted); }
+    .dim-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; transition: color 0.15s; }
+    input[type=range].dim-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 5px; border-radius: 3px; outline: none; cursor: pointer; background: var(--brd2); }
+    input[type=range].dim-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; box-shadow: 0 0 0 1px var(--accent); }
+
+    /* Action btns */
+    .action-row { display: flex; gap: 8px; }
+    .btn { flex: 1; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--acc2); transform: translateY(-1px); }
+    .btn-ghost { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); }
+    .btn-ghost:hover { background: var(--surf3); }
+    .btn-flag { background: rgba(245,200,66,0.1); border: 1px solid rgba(245,200,66,0.3); color: var(--amber); }
+    .btn-flag.flagged { background: rgba(245,200,66,0.2); border-color: var(--amber); }
+
+    /* Agg preview bars */
+    .agg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .agg-dim { font-size: 11px; color: var(--muted); min-width: 110px; }
+    .agg-bar-wrap { flex: 1; height: 5px; background: var(--brd2); border-radius: 3px; overflow: hidden; }
+    .agg-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+    .agg-val { font-size: 11px; font-weight: 700; min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── Compare view ── */
+    .compare-panel { max-width: 1200px; margin: 0 auto; }
+    .compare-selectors { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: end; }
+    .comp-select { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); font-size: 13px; padding: 7px 12px; border-radius: 7px; outline: none; }
+    .compare-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .comp-video-card { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+    .comp-video-wrap { aspect-ratio: 16/9; background: #000; position: relative; }
+    .comp-video-wrap video, .comp-video-wrap canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .comp-video-wrap canvas { position: absolute; inset: 0; }
+    .comp-footer { padding: 8px 12px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .comp-label { font-size: 12px; font-weight: 600; }
+    .comp-score { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    /* Diff controls */
+    .diff-controls { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 16px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .diff-mode-btn { padding: 4px 11px; border-radius: 5px; border: 1px solid var(--brd2); background: var(--surf2); color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.12s; }
+    .diff-mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .diff-stats { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-left: auto; }
+    .diff-stats span { font-weight: 700; color: var(--text); }
+
+    /* ── Results view ── */
+    .results-panel { max-width: 1200px; margin: 0 auto; }
+    .results-actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .results-table th { text-align: left; padding: 8px 12px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--brd2); cursor: pointer; }
+    .results-table th:hover { color: var(--text); }
+    .results-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .results-table tr:hover td { background: var(--surf2); }
+    .score-pill { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 22px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+    .flag-indicator { font-size: 14px; }
+
+    /* Done card */
+    .done-card { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); padding: 36px; text-align: center; max-width: 500px; margin: 0 auto; }
+
+    /* Kbd */
+    .kbd-hint { font-size: 11px; color: #444; display: flex; flex-wrap: wrap; gap: 6px; }
+    .kbd { background: #181820; border: 1px solid #252535; border-radius: 4px; padding: 1px 5px; font-size: 10px; color: #555; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surf2); border: 1px solid rgba(124,108,252,0.4); border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) {
+      .rate-grid { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Swag<span>Score</span> <sup>v2</sup></div>
+  <span style="font-size:11px;color:var(--muted)" id="session-meta">—</span>
+  <div class="hdr-spacer"></div>
+  <button class="pb-btn" onclick="exportCSV()">⬇ CSV</button>
+  <button class="pb-btn" onclick="exportHTMLReport()">📄 HTML Report</button>
+</header>
+<div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-fill" style="width:0%"></div></div>
+
+<div class="tab-bar">
+  <div class="tab active" data-tab="rate" onclick="showTab('rate')">⭐ Rate <span class="tab-count" id="rate-count">0</span></div>
+  <div class="tab" data-tab="compare" onclick="showTab('compare');initCompare()">🔬 Compare</div>
+  <div class="tab" data-tab="results" onclick="showTab('results');renderResultsTable()">📊 Results <span class="tab-count" id="res-count">0</span></div>
+</div>
+
+<!-- ── RATING VIEW ── -->
+<div class="view active" id="tab-rate">
+  <div class="rate-grid" id="rate-content">
+    <div style="color:var(--muted);padding:60px;text-align:center">Loading…</div>
+  </div>
+</div>
+
+<!-- ── COMPARE VIEW ── -->
+<div class="view" id="tab-compare">
+  <div class="compare-panel">
+    <div class="compare-selectors">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Video A</div>
+        <select class="comp-select" id="comp-a-select" onchange="updateCompare()"></select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Video B</div>
+        <select class="comp-select" id="comp-b-select" onchange="updateCompare()"></select>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="pb-btn active" id="comp-play-btn" onclick="toggleComparePlay()">⏸ Sync Play</button>
+        <button class="pb-btn" onclick="restartCompare()">↺ Restart</button>
+      </div>
+    </div>
+    <div class="diff-controls">
+      <span style="font-size:12px;color:var(--muted)">Diff Mode:</span>
+      <button class="diff-mode-btn active" onclick="setDiffMode('heatmap',this)">Heatmap</button>
+      <button class="diff-mode-btn" onclick="setDiffMode('abs',this)">Abs</button>
+      <button class="diff-mode-btn" onclick="setDiffMode('mask',this)">Mask</button>
+      <button class="diff-mode-btn" onclick="setDiffMode('off',this)">Off</button>
+      <div class="diff-stats">
+        PSNR: <span id="cmp-psnr">—</span>
+        Mean Δ: <span id="cmp-mean">—</span>
+        Changed: <span id="cmp-changed">—</span>
+      </div>
+    </div>
+    <div class="compare-grid">
+      <div class="comp-video-card">
+        <div class="comp-video-wrap"><video id="cmp-vid-a" playsinline loop muted></video></div>
+        <div class="comp-footer"><span class="comp-label" id="cmp-label-a">Video A</span><span class="comp-score" id="cmp-score-a">—</span></div>
+      </div>
+      <div class="comp-video-card">
+        <div class="comp-video-wrap" style="background:var(--surf2)">
+          <canvas id="cmp-diff-canvas" style="object-fit:contain"></canvas>
+        </div>
+        <div class="comp-footer"><span class="comp-label">Pixel Diff</span><span class="comp-score" id="cmp-diff-label">heatmap</span></div>
+      </div>
+      <div class="comp-video-card">
+        <div class="comp-video-wrap"><video id="cmp-vid-b" playsinline loop muted></video></div>
+        <div class="comp-footer"><span class="comp-label" id="cmp-label-b">Video B</span><span class="comp-score" id="cmp-score-b">—</span></div>
+      </div>
+    </div>
+    <!-- Compare scrubber -->
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-top:10px;display:flex;align-items:center;gap:8px">
+      <span class="scr-t" id="cmp-cur">0:00</span>
+      <input type="range" class="vid-scrubber" id="cmp-scrubber" min="0" max="100" step="0.1" value="0" style="flex:1">
+      <span class="scr-t" id="cmp-dur">0:00</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── RESULTS VIEW ── -->
+<div class="view" id="tab-results">
+  <div class="results-panel">
+    <div class="results-actions">
+      <button class="btn btn-ghost" style="flex:none;padding:7px 16px;font-size:12px" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn btn-ghost" style="flex:none;padding:7px 16px;font-size:12px" onclick="exportHTMLReport()">📄 HTML Report</button>
+      <button class="btn btn-ghost" style="flex:none;padding:7px 16px;font-size:12px" onclick="clearData()">🗑 Clear</button>
+    </div>
+    <div style="overflow-x:auto"><table class="results-table">
+      <thead><tr>
+        <th>Video</th><th>Task</th>
+        <th id="sort-agg" onclick="sortBy('agg')" style="cursor:pointer">Aggregate ↓</th>
+        <th>Scores</th><th>Flag</th><th>Time</th>
+      </tr></thead>
+      <tbody id="results-tbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════ CONFIG ════════════════ -->
+<script>
+const SESSION_NAME  = 'swag-session-v2';
+const EVALUATOR     = 'evaluator-1';
+
+// Replace with your own video URLs
+const VIDEOS = [
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',                    label: 'Original Demo',     task: 'Pick and place — baseline',  type: 'original'  },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',    label: 'Cosmos Gen v1',     task: 'Pick and place — aug run 1', type: 'generated' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',             label: 'Cosmos Gen v2',     task: 'Pick and place — aug run 2', type: 'generated' },
+  { file: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',             label: 'Cosmos Gen v3',     task: 'Pick and place — aug run 3', type: 'generated' },
+];
+
+const DIMENSIONS = [
+  { id: 'smoothness',  name: 'Smoothness',      icon: '〰️', desc: 'Motion fluidity',         weight: 1 },
+  { id: 'completion',  name: 'Completion',       icon: '✅', desc: 'Task goal achieved',       weight: 2 },
+  { id: 'naturalness', name: 'Naturalness',      icon: '🤖', desc: 'Physically plausible',     weight: 1 },
+  { id: 'speed',       name: 'Speed',            icon: '⚡', desc: 'Appropriate pace',          weight: 1 },
+  { id: 'recovery',    name: 'Recovery',         icon: '🔄', desc: 'Handles errors',            weight: 1 },
+];
+const SCALE_MAX = 10;
+</script>
+<!-- ════════════════════════════════════════ -->
+
+<script>
+// ── State ──
+const STORAGE_KEY = `swag-score-v2:${SESSION_NAME}`;
+let ratings  = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let flags    = JSON.parse(localStorage.getItem(STORAGE_KEY+':flags') || '[]');
+let curIdx   = 0;
+let curSpeed = 1;
+let scrDrag  = false;
+let sortAsc  = false;
+
+// Compare state
+let cmpMode = 'heatmap';
+let cmpRaf  = null;
+let cmpDrag = false;
+let cmpPlaying = true;
+
+function fmtT(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+function scoreColor(v, max=SCALE_MAX) {
+  const p = v/max;
+  return p < 0.5 ? `rgb(240,${Math.round(p*2*155+52)},52)` : `rgb(${Math.round((1-(p-0.5)*2)*240)},207,52)`;
+}
+
+// ── Session meta ──
+document.getElementById('session-meta').textContent = `${SESSION_NAME} · ${EVALUATOR}`;
+
+// ── Load rating view ──
+function loadRatingView() {
+  const ratedFiles = new Set(ratings.map(r => r.file));
+  while (curIdx < VIDEOS.length && ratedFiles.has(VIDEOS[curIdx].file)) curIdx++;
+
+  updateProgress();
+  if (curIdx >= VIDEOS.length) { renderDoneState(); return; }
+
+  const v = VIDEOS[curIdx];
+  const isFlagged = flags.includes(v.file);
+
+  const slidersHTML = DIMENSIONS.map((dim, i) => `
+    <div class="dim-row">
+      <div class="dim-hdr">
+        <div><span style="font-size:13px">${dim.icon}</span> <span class="dim-name">${dim.name}</span><div class="dim-desc">${dim.desc}</div></div>
+        <span class="dim-val" id="dval-${dim.id}">5</span>
+      </div>
+      <input type="range" class="dim-slider" id="dslider-${dim.id}" min="1" max="${SCALE_MAX}" step="1" value="5" data-dim="${dim.id}" oninput="updateDimSlider('${dim.id}')">
+    </div>`).join('');
+
+  document.getElementById('rate-content').innerHTML = `
+    <div>
+      <div class="video-wrap"><video id="main-vid" src="${v.file}" playsinline loop autoplay muted></video></div>
+      <div class="scr-row">
+        <span class="scr-t" id="scr-cur">0:00</span>
+        <input type="range" class="vid-scrubber" id="vid-scr" min="0" max="100" step="0.1" value="0">
+        <span class="scr-t" id="scr-dur">0:00</span>
+      </div>
+      <div class="pb-row">
+        <button class="pb-btn" onclick="toggleMainPlay()" id="main-play-btn">⏸</button>
+        ${[0.5,1,2].map(s => `<button class="pb-btn${s===1?' active':''} speed-btn" onclick="setMainSpeed(${s})">${s===0.5?'½':s}×</button>`).join('')}
+        <span class="pb-spacer"></span>
+        <span id="vid-time" style="font-size:11px;color:var(--muted)">—</span>
+      </div>
+      <div class="video-meta">
+        <h2>${v.label}</h2>
+        <p>${v.task} · <span style="color:var(--accent)">${v.type}</span></p>
+      </div>
+    </div>
+    <div class="rate-panel">
+      <div class="panel-card">
+        <h3>Rate — video ${curIdx+1}/${VIDEOS.length}</h3>
+        ${slidersHTML}
+      </div>
+      <div class="panel-card">
+        <h3>Notes (optional)</h3>
+        <textarea id="note-field" placeholder="Observations…" style="width:100%;background:var(--surf2);border:1px solid var(--brd2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12px;padding:8px 10px;resize:vertical;min-height:56px;outline:none"></textarea>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-ghost" onclick="skipVideo()">Skip</button>
+        <button class="btn btn-flag${isFlagged?' flagged':''}" id="flag-btn" onclick="toggleFlag('${v.file}')">🚩 ${isFlagged?'Flagged':'Flag'}</button>
+        <button class="btn btn-primary" onclick="submitRating()">Submit →</button>
+      </div>
+      <div id="agg-card" style="display:none" class="panel-card">
+        <h3>Session Averages</h3>
+        <div id="agg-bars"></div>
+      </div>
+      <div class="kbd-hint">
+        <span class="kbd">Space</span> play · <span class="kbd">R</span> restart · <span class="kbd">Enter</span> submit · <span class="kbd">F</span> flag
+      </div>
+    </div>
+  `;
+
+  // Wire scrubber
+  const vid = document.getElementById('main-vid');
+  const scr = document.getElementById('vid-scr');
+  let scrDrag2 = false;
+  setInterval(() => {
+    if (!vid.duration) return;
+    document.getElementById('vid-time').textContent = fmtT(vid.currentTime);
+    document.getElementById('scr-cur').textContent = fmtT(vid.currentTime);
+    document.getElementById('scr-dur').textContent = fmtT(vid.duration);
+    if (!scrDrag2) {
+      scr.max = vid.duration; scr.value = vid.currentTime;
+      scr.style.setProperty('--pct', (vid.currentTime/vid.duration*100).toFixed(2)+'%');
+    }
+  }, 150);
+  scr.addEventListener('mousedown', () => { scrDrag2=true; });
+  scr.addEventListener('mouseup', () => { vid.currentTime = parseFloat(scr.value); scrDrag2=false; });
+  scr.addEventListener('change', () => { vid.currentTime = parseFloat(scr.value); scrDrag2=false; });
+  vid.addEventListener('play', () => { const b=document.getElementById('main-play-btn'); if(b) b.textContent='⏸'; });
+  vid.addEventListener('pause', () => { const b=document.getElementById('main-play-btn'); if(b) b.textContent='▶'; });
+
+  // Init sliders
+  DIMENSIONS.forEach(d => updateDimSlider(d.id));
+  updateAggBars();
+}
+
+function updateDimSlider(dimId) {
+  const s = document.getElementById(`dslider-${dimId}`);
+  const v = document.getElementById(`dval-${dimId}`);
+  if (!s||!v) return;
+  const val = parseInt(s.value);
+  const color = scoreColor(val);
+  v.textContent = val; v.style.color = color;
+  const pct = ((val-1)/(SCALE_MAX-1)*100).toFixed(1)+'%';
+  s.style.background = `linear-gradient(to right,${color} 0%,${color} ${pct},var(--brd2) ${pct},var(--brd2) 100%)`;
+}
+
+function toggleMainPlay() { const v=document.getElementById('main-vid'); v.paused?v.play():v.pause(); }
+function setMainSpeed(s) { curSpeed=s; const v=document.getElementById('main-vid'); if(v)v.playbackRate=s; document.querySelectorAll('.speed-btn').forEach((b,i)=>b.classList.toggle('active',[0.5,1,2][i]===s)); }
+
+function submitRating() {
+  const v = VIDEOS[curIdx];
+  const scores = {}; let wtSum=0, wtTotal=0;
+  DIMENSIONS.forEach(d => { scores[d.id]=parseInt(document.getElementById(`dslider-${d.id}`)?.value||5); wtSum+=scores[d.id]*d.weight; wtTotal+=d.weight; });
+  const agg = (wtSum/wtTotal).toFixed(2);
+  ratings.push({ session:SESSION_NAME, evaluator:EVALUATOR, file:v.file, label:v.label, task:v.task, ...scores, aggregate:parseFloat(agg), notes:document.getElementById('note-field')?.value||'', timestamp:new Date().toISOString() });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ratings));
+  document.getElementById('rate-count').textContent = ratings.length;
+  document.getElementById('res-count').textContent  = ratings.length;
+  showToast(`✓ ${v.label} — score ${agg}/10`);
+  curIdx++;
+  updateAggBars();
+  loadRatingView();
+}
+
+function skipVideo() { showToast('Skipped'); curIdx++; loadRatingView(); }
+
+function toggleFlag(file) {
+  const i = flags.indexOf(file);
+  if (i>=0) flags.splice(i,1); else flags.push(file);
+  localStorage.setItem(STORAGE_KEY+':flags', JSON.stringify(flags));
+  const btn = document.getElementById('flag-btn');
+  if (btn) { btn.classList.toggle('flagged', flags.includes(file)); btn.textContent = flags.includes(file) ? '🚩 Flagged' : '🚩 Flag'; }
+  showToast(flags.includes(file) ? '🚩 Flagged for re-review' : 'Flag removed');
+}
+
+function updateAggBars() {
+  if (!ratings.length) { const c=document.getElementById('agg-card'); if(c) c.style.display='none'; return; }
+  const card = document.getElementById('agg-card'); if (!card) return;
+  card.style.display='';
+  const bars = document.getElementById('agg-bars');
+  bars.innerHTML = DIMENSIONS.map(d => {
+    const avg = ratings.reduce((a,r)=>a+(r[d.id]||0),0)/ratings.length;
+    const pct = ((avg-1)/(SCALE_MAX-1)*100).toFixed(1);
+    const c = scoreColor(avg);
+    return `<div class="agg-row"><span class="agg-dim">${d.icon} ${d.name}</span><div class="agg-bar-wrap"><div class="agg-bar-fill" style="width:${pct}%;background:${c}"></div></div><span class="agg-val" style="color:${c}">${avg.toFixed(1)}</span></div>`;
+  }).join('');
+}
+
+function renderDoneState() {
+  document.getElementById('rate-content').innerHTML = `
+    <div class="done-card" style="grid-column:1/-1">
+      <div style="font-size:48px;margin-bottom:12px">🎉</div>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">All videos rated!</h2>
+      <p style="font-size:14px;color:var(--muted)">${ratings.length} ratings saved · session <strong>${SESSION_NAME}</strong></p>
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:center">
+        <button class="btn btn-primary" style="flex:none;padding:10px 20px" onclick="showTab('results');renderResultsTable()">📊 Results</button>
+        <button class="btn btn-ghost" style="flex:none;padding:10px 20px" onclick="showTab('compare');initCompare()">🔬 Compare</button>
+      </div>
+    </div>`;
+}
+
+function updateProgress() {
+  const done = ratings.length; const total = VIDEOS.length;
+  document.getElementById('prog-fill').style.width = (done/total*100)+'%';
+  document.getElementById('rate-count').textContent = done;
+  document.getElementById('res-count').textContent  = done;
+}
+
+// ── COMPARE MODE ──
+function initCompare() {
+  const selectA = document.getElementById('comp-a-select');
+  const selectB = document.getElementById('comp-b-select');
+  VIDEOS.forEach((v, i) => {
+    [selectA, selectB].forEach(sel => {
+      if (![...sel.options].some(o => o.value === v.file)) {
+        const opt = new Option(v.label, v.file);
+        sel.add(opt);
+      }
+    });
+  });
+  if (VIDEOS.length >= 2) { selectA.value = VIDEOS[0].file; selectB.value = VIDEOS[1].file; }
+  updateCompare();
+}
+
+function updateCompare() {
+  const fileA = document.getElementById('comp-a-select').value;
+  const fileB = document.getElementById('comp-b-select').value;
+  const vidA = document.getElementById('cmp-vid-a');
+  const vidB = document.getElementById('cmp-vid-b');
+  vidA.src = fileA; vidB.src = fileB;
+  vidA.play().catch(()=>{}); vidB.play().catch(()=>{});
+
+  const rA = ratings.find(r=>r.file===fileA);
+  const rB = ratings.find(r=>r.file===fileB);
+  const vA = VIDEOS.find(v=>v.file===fileA);
+  const vB = VIDEOS.find(v=>v.file===fileB);
+
+  document.getElementById('cmp-label-a').textContent = vA?.label || fileA;
+  document.getElementById('cmp-label-b').textContent = vB?.label || fileB;
+  document.getElementById('cmp-score-a').textContent = rA ? `Score: ${rA.aggregate}` : 'Not rated';
+  document.getElementById('cmp-score-b').textContent = rB ? `Score: ${rB.aggregate}` : 'Not rated';
+  if (rA) document.getElementById('cmp-score-a').style.color = scoreColor(rA.aggregate);
+  if (rB) document.getElementById('cmp-score-b').style.color = scoreColor(rB.aggregate);
+
+  // Wire compare scrubber
+  const scr = document.getElementById('cmp-scrubber');
+  vidA.addEventListener('loadedmetadata', () => { scr.max = vidA.duration; document.getElementById('cmp-dur').textContent = fmtT(vidA.duration); }, {once:true});
+
+  cancelAnimationFrame(cmpRaf);
+  runDiffLoop();
+}
+
+function runDiffLoop() {
+  const vidA = document.getElementById('cmp-vid-a');
+  const vidB = document.getElementById('cmp-vid-b');
+  const canvas = document.getElementById('cmp-diff-canvas');
+
+  if (!vidA.videoWidth || !vidB.videoWidth) { cmpRaf = requestAnimationFrame(runDiffLoop); return; }
+
+  const W = vidA.videoWidth, H = vidA.videoHeight;
+  if (canvas.width !== W) { canvas.width = W; canvas.height = H; }
+
+  const tmpA = document.createElement('canvas'); tmpA.width=W; tmpA.height=H;
+  const tmpB = document.createElement('canvas'); tmpB.width=W; tmpB.height=H;
+  const ctxA = tmpA.getContext('2d',{willReadFrequently:true});
+  const ctxB = tmpB.getContext('2d',{willReadFrequently:true});
+  ctxA.drawImage(vidA,0,0,W,H); ctxB.drawImage(vidB,0,0,W,H);
+  const dA = ctxA.getImageData(0,0,W,H); const dB = ctxB.getImageData(0,0,W,H);
+  const ctxD = canvas.getContext('2d',{willReadFrequently:true});
+  const diff = ctxD.createImageData(W,H);
+  const pA=dA.data, pB=dB.data, pD=diff.data;
+  let sumD=0, maxD=0, changed=0, mse=0;
+  for (let i=0;i<W*H;i++) {
+    const idx=i*4;
+    const d=(Math.abs(pA[idx]-pB[idx])+Math.abs(pA[idx+1]-pB[idx+1])+Math.abs(pA[idx+2]-pB[idx+2]))/3;
+    sumD+=d; mse+=d*d; if(d>maxD)maxD=d; if(d>20)changed++;
+    if(cmpMode==='off'){pD[idx]=pA[idx];pD[idx+1]=pA[idx+1];pD[idx+2]=pA[idx+2];pD[idx+3]=255;continue;}
+    const t=Math.min(d/255,1);
+    let r,g,b;
+    if(cmpMode==='heatmap'){if(t<0.25){r=0;g=Math.round(t*4*255);b=255;}else if(t<0.5){r=0;g=255;b=Math.round((1-(t-0.25)*4)*255);}else if(t<0.75){r=Math.round((t-0.5)*4*255);g=255;b=0;}else{r=255;g=Math.round((1-(t-0.75)*4)*255);b=0;}
+    }else if(cmpMode==='abs'){r=g=b=Math.min(Math.round(d*3),255);
+    }else if(cmpMode==='mask'){r=d>20?244:0;g=d>20?63:0;b=d>20?94:0;}
+    pD[idx]=r;pD[idx+1]=g;pD[idx+2]=b;pD[idx+3]=255;
+  }
+  ctxD.putImageData(diff,0,0);
+
+  const n=W*H;
+  const psnr=mse>0?(10*Math.log10(255*255/(mse/n))).toFixed(1):'∞';
+  document.getElementById('cmp-psnr').textContent=psnr+' dB';
+  document.getElementById('cmp-mean').textContent=(sumD/n).toFixed(1);
+  document.getElementById('cmp-changed').textContent=(changed/n*100).toFixed(1)+'%';
+
+  // Update scrubber
+  const scr=document.getElementById('cmp-scrubber');
+  if(!cmpDrag&&vidA.duration){scr.value=vidA.currentTime;document.getElementById('cmp-cur').textContent=fmtT(vidA.currentTime);scr.style.setProperty('--pct',(vidA.currentTime/vidA.duration*100).toFixed(2)+'%');}
+
+  cmpRaf = requestAnimationFrame(runDiffLoop);
+}
+
+function setDiffMode(mode, btn) {
+  cmpMode=mode; document.querySelectorAll('.diff-mode-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.getElementById('cmp-diff-label').textContent=mode;
+}
+function toggleComparePlay() {
+  const va=document.getElementById('cmp-vid-a'),vb=document.getElementById('cmp-vid-b');
+  const btn=document.getElementById('comp-play-btn');
+  if(va.paused){va.play();vb.play();btn.textContent='⏸ Sync Play';}else{va.pause();vb.pause();btn.textContent='▶ Sync Play';}
+}
+function restartCompare() {
+  ['cmp-vid-a','cmp-vid-b'].forEach(id=>{const v=document.getElementById(id);v.currentTime=0;v.play().catch(()=>{});});
+}
+// Compare scrubber
+document.getElementById('cmp-scrubber').addEventListener('mousedown',()=>{cmpDrag=true;});
+document.getElementById('cmp-scrubber').addEventListener('mouseup',()=>{const t=parseFloat(document.getElementById('cmp-scrubber').value);['cmp-vid-a','cmp-vid-b'].forEach(id=>{document.getElementById(id).currentTime=t;});cmpDrag=false;});
+document.getElementById('cmp-scrubber').addEventListener('change',()=>{const t=parseFloat(document.getElementById('cmp-scrubber').value);['cmp-vid-a','cmp-vid-b'].forEach(id=>{document.getElementById(id).currentTime=t;});cmpDrag=false;});
+
+// ── RESULTS TABLE ──
+let sortKey='agg';
+function sortBy(k){if(sortKey===k)sortAsc=!sortAsc;else{sortKey=k;sortAsc=false;}renderResultsTable();}
+
+function renderResultsTable() {
+  const sorted = [...ratings].sort((a,b) => sortAsc ? a.aggregate-b.aggregate : b.aggregate-a.aggregate);
+  document.getElementById('results-tbody').innerHTML = sorted.map(r => {
+    const isFlagged = flags.includes(r.file);
+    const c = scoreColor(r.aggregate);
+    const dimCells = DIMENSIONS.map(d=>`<span class="score-pill" style="background:${scoreColor(r[d.id]||0)}22;color:${scoreColor(r[d.id]||0)}">${r[d.id]||0}</span>`).join(' ');
+    return `<tr>
+      <td><div style="font-weight:600;color:#fff">${r.label}</div><div style="font-size:11px;color:var(--muted)">${r.file}</div></td>
+      <td style="font-size:11px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis">${r.task}</td>
+      <td><span class="score-pill" style="background:${c}22;color:${c};width:44px;font-size:13px">${r.aggregate}</span></td>
+      <td>${dimCells}</td>
+      <td class="flag-indicator">${isFlagged?'🚩':'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${new Date(r.timestamp).toLocaleTimeString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── CSV Export ──
+function exportCSV() {
+  if (!ratings.length) { showToast('No ratings yet!'); return; }
+  const cols = ['session','evaluator','file','label','task',...DIMENSIONS.map(d=>d.id),'aggregate','flagged','notes','timestamp'];
+  const rows = ratings.map(r => cols.map(k => {
+    if (k==='flagged') return flags.includes(r.file) ? 'true' : 'false';
+    return JSON.stringify(r[k]??'');
+  }).join(','));
+  const csv = [cols.join(','),...rows].join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${SESSION_NAME}-v2.csv`});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${ratings.length} ratings`);
+}
+
+// ── HTML Report ──
+function exportHTMLReport() {
+  if (!ratings.length) { showToast('No ratings yet!'); return; }
+  const sorted = [...ratings].sort((a,b)=>b.aggregate-a.aggregate);
+  const rows = sorted.map((r,i)=>{
+    const c=scoreColor(r.aggregate); const isFlagged=flags.includes(r.file);
+    const bars = DIMENSIONS.map(d=>{const v=r[d.id]||0;const p=((v-1)/(SCALE_MAX-1)*100).toFixed(1);const col=scoreColor(v);return `<div style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:3px"><span style="min-width:90px;color:#888">${d.name}</span><div style="flex:1;height:4px;background:#2a2a33;border-radius:2px;overflow:hidden"><div style="width:${p}%;height:100%;background:${col};border-radius:2px"></div></div><span style="color:${col};font-weight:700;min-width:18px;text-align:right">${v}</span></div>`;}).join('');
+    return `<tr style="border-bottom:1px solid #1e1e2a"><td style="padding:12px;font-variant-numeric:tabular-nums;color:${i<3?['#f59e0b','#94a3b8','#c07040'][i]:'#666'};font-weight:800;text-align:center">${i+1}</td><td style="padding:12px"><div style="font-weight:700;color:#fff">${r.label}${isFlagged?' 🚩':''}</div><div style="font-size:11px;color:#666">${r.task}</div></td><td style="padding:12px"><div style="font-size:20px;font-weight:800;color:${c}">${r.aggregate}</div><div style="font-size:10px;color:#666">/ 10</div></td><td style="padding:12px;min-width:180px">${bars}</td><td style="padding:12px;font-size:11px;color:#666">${r.notes||'—'}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SwagScore v2 Report — ${SESSION_NAME}</title></head><body style="background:#07070e;color:#e0e0f4;font-family:system-ui,sans-serif;padding:40px 24px;max-width:900px;margin:0 auto"><h1 style="font-size:24px;font-weight:800;margin-bottom:4px">SwagScore v2 Report</h1><p style="color:#545472;margin-bottom:24px">Session: ${SESSION_NAME} · Evaluator: ${EVALUATOR} · ${ratings.length} ratings · ${new Date().toLocaleDateString()}</p><table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid #1e1e2a"><th style="padding:8px 12px;text-align:left;color:#545472;font-size:11px;text-transform:uppercase">#</th><th style="padding:8px 12px;text-align:left;color:#545472;font-size:11px;text-transform:uppercase">Video</th><th style="padding:8px 12px;text-align:left;color:#545472;font-size:11px;text-transform:uppercase">Aggregate</th><th style="padding:8px 12px;text-align:left;color:#545472;font-size:11px;text-transform:uppercase">Dimensions</th><th style="padding:8px 12px;text-align:left;color:#545472;font-size:11px;text-transform:uppercase">Notes</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  const blob = new Blob([html],{type:'text/html'});
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${SESSION_NAME}-report.html`});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast('HTML report downloaded!');
+}
+
+function clearData() {
+  if (!confirm(`Delete all ${ratings.length} ratings?`)) return;
+  ratings=[]; flags=[]; localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY+':flags');
+  curIdx=0; updateProgress(); loadRatingView();
+  showToast('Cleared!');
+}
+
+// ── Tabs ──
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===`tab-${name}`));
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT') return;
+  switch(e.key) {
+    case ' ': e.preventDefault(); toggleMainPlay(); break;
+    case 'r': case 'R': { const v=document.getElementById('main-vid'); if(v){v.currentTime=0;v.play();} break; }
+    case 'Enter': submitRating(); break;
+    case 'f': case 'F': if (curIdx<VIDEOS.length) toggleFlag(VIDEOS[curIdx].file); break;
+  }
+});
+
+// ── Toast ──
+let toastT;
+function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2400); }
+
+// ── Init ──
+const ratedFiles = new Set(ratings.map(r=>r.file));
+while (curIdx < VIDEOS.length && ratedFiles.has(VIDEOS[curIdx].file)) curIdx++;
+updateProgress(); loadRatingView();
+</script>
+</body>
+</html>

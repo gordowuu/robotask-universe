@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PolicyLeaderboard v2 — Robot Policy Rankings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #07070f; --surf: #0d0d1c; --surf2: #121222; --surf3: #181828;
+      --border: #1c1c32; --brd2: #232342; --text: #e0e0f4; --muted: #525270;
+      --dim: #383858; --gold: #f59e0b; --silver: #94a3b8; --bronze: #c07040;
+      --accent: #6366f1; --acc2: #4f46e5; --green: #22c55e; --red: #ef4444;
+      --cyan: #22d3ee; --r: 10px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: rgba(7,7,15,0.97); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 28px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 40; flex-wrap: wrap;
+    }
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+    .logo span { color: var(--accent); }
+    .logo sup { font-size: 10px; background: var(--accent); color: #fff; padding: 1px 4px; border-radius: 3px; vertical-align: super; }
+    .header-spacer { flex: 1; }
+
+    .toolbar {
+      background: var(--surf); border-bottom: 1px solid var(--border);
+      padding: 10px 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .filter-chip { padding: 4px 11px; border-radius: 20px; border: 1px solid var(--brd2); background: var(--surf2); color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.14s; white-space: nowrap; }
+    .filter-chip:hover { color: var(--text); border-color: var(--dim); }
+    .filter-chip.active { background: rgba(99,102,241,0.15); border-color: var(--accent); color: #c7d2fe; }
+    .tb-spacer { flex: 1; }
+    .search-input { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); padding: 5px 12px; border-radius: 6px; font-size: 12px; outline: none; width: 200px; font-family: inherit; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--muted); }
+
+    .content { padding: 28px; max-width: 1260px; margin: 0 auto; }
+
+    /* Stats */
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: var(--surf); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-val { font-size: 22px; font-weight: 800; margin-top: 4px; }
+
+    /* Task tabs */
+    .task-tabs { display: flex; gap: 0; margin-bottom: 18px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .task-tab { padding: 9px 15px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.14s; white-space: nowrap; }
+    .task-tab:hover { color: var(--text); }
+    .task-tab.active { color: #fff; border-bottom-color: var(--accent); }
+
+    /* Main layout */
+    .lb-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+
+    /* Leaderboard table */
+    .lb-table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 9px 12px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted); border-bottom: 1px solid var(--brd2);
+      cursor: pointer; user-select: none; transition: color 0.12s; white-space: nowrap;
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sort-active { color: var(--accent); }
+    thead th.sort-active::after { content: ' ↓'; font-size: 10px; }
+    thead th.sort-active.asc::after { content: ' ↑'; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; cursor: pointer; }
+    tbody tr:hover { background: var(--surf2); }
+    tbody tr.selected { background: rgba(99,102,241,0.07); border-left: 2px solid var(--accent); }
+    td { padding: 11px 12px; vertical-align: middle; }
+    .rank-cell { text-align: center; min-width: 40px; }
+    .rank-num { font-size: 13px; font-weight: 800; }
+    .rank-1 { color: var(--gold); }
+    .rank-2 { color: var(--silver); }
+    .rank-3 { color: var(--bronze); }
+    .rank-other { color: var(--muted); }
+    .policy-name { font-size: 13px; font-weight: 700; color: #fff; }
+    .policy-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .policy-tags { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+    .policy-tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; }
+    .score-big { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .sparkline { display: flex; align-items: flex-end; gap: 2px; height: 24px; min-width: 50px; }
+    .spark-bar { flex: 1; min-width: 4px; border-radius: 2px 2px 0 0; }
+    .delta { font-size: 11px; font-weight: 700; }
+    .delta.pos { color: var(--green); }
+    .delta.neg { color: var(--red); }
+    .delta.neu { color: var(--muted); }
+
+    /* Dim mini bars */
+    .dim-bars { display: flex; flex-direction: column; gap: 3px; min-width: 110px; }
+    .dim-bar-row { display: flex; align-items: center; gap: 4px; }
+    .dim-bar-label { font-size: 10px; color: var(--muted); min-width: 50px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dim-bar-track { flex: 1; height: 4px; background: var(--brd2); border-radius: 2px; overflow: hidden; }
+    .dim-bar-fill { height: 100%; border-radius: 2px; }
+    .dim-bar-val { font-size: 10px; font-weight: 700; min-width: 20px; text-align: right; }
+
+    /* Run notes indicator */
+    .run-note-icon { font-size: 13px; cursor: pointer; }
+
+    /* ── Right panel: radar chart + details ── */
+    .detail-panel {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px;
+      position: sticky; top: 80px; max-height: 85vh; overflow-y: auto;
+    }
+    .detail-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 0; }
+    .detail-name { font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 3px; }
+    .detail-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+
+    /* Radar chart (SVG) */
+    .radar-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+    svg.radar { overflow: visible; }
+
+    /* Detail dim list */
+    .detail-dim-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .detail-dim-name { font-size: 12px; min-width: 120px; }
+    .detail-dim-bar-track { flex: 1; height: 7px; background: var(--brd2); border-radius: 4px; overflow: hidden; }
+    .detail-dim-bar-fill { height: 100%; border-radius: 4px; }
+    .detail-dim-val { font-size: 12px; font-weight: 700; min-width: 26px; text-align: right; }
+
+    /* Detail history */
+    .detail-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 14px 0 8px; }
+    .history-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+    .history-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; border: 1px solid; font-variant-numeric: tabular-nums; }
+
+    /* Run notes */
+    .run-notes-text { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--surf2); border-radius: 7px; padding: 10px 12px; }
+
+    /* Share URL */
+    .share-row { display: flex; gap: 6px; margin-top: 8px; }
+    .share-url { flex: 1; background: var(--surf2); border: 1px solid var(--brd2); color: #a5b4fc; font-family: monospace; font-size: 11px; padding: 5px 8px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .copy-url-btn { background: var(--surf2); border: 1px solid var(--brd2); color: var(--text); padding: 5px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+    .copy-url-btn:hover { background: var(--surf3); }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surf2); border: 1px solid rgba(99,102,241,0.4); border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 1000px) { .lb-layout { grid-template-columns: 1fr; } .detail-panel { position: static; } }
+    @media (max-width: 600px) { .content { padding: 16px; } .toolbar { padding: 10px 16px; } header { padding: 10px 16px; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">Policy<span>LB</span> <sup>v2</sup></div>
+    <span style="font-size:12px;color:var(--muted)">Robot Policy Eval Rankings</span>
+  </div>
+  <div class="header-spacer"></div>
+  <button style="background:var(--surf2);border:1px solid var(--brd2);color:var(--text);padding:5px 13px;border-radius:7px;font-size:12px;cursor:pointer" onclick="copyShareURL()">🔗 Share</button>
+  <button style="background:var(--surf2);border:1px solid var(--brd2);color:var(--text);padding:5px 13px;border-radius:7px;font-size:12px;cursor:pointer" onclick="exportCSV()">⬇ CSV</button>
+</header>
+
+<div class="toolbar">
+  <span style="font-size:12px;color:var(--muted)">Tags:</span>
+  <div id="tag-filters" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+  <div class="tb-spacer"></div>
+  <input class="search-input" id="search" type="text" placeholder="Search policies…" oninput="renderAll()">
+</div>
+
+<div class="content">
+  <div class="stats-bar" id="stats-bar"></div>
+  <div class="task-tabs" id="task-tabs"></div>
+  <div class="lb-layout">
+    <div>
+      <div class="lb-table-wrap">
+        <table>
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-empty">← Click a policy to see its radar chart &amp; details</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════
+     DATA CONFIGURATION — edit this section
+     ════════════════════════════════════ -->
+<script>
+const META = { title: 'synphonyco — Policy Leaderboard v2', lastUpdated: '2026-03-17', scoreScale: 10 };
+
+const DIMENSIONS = [
+  { id: 'task_success',  name: 'Task Success', weight: 0.30 },
+  { id: 'smoothness',    name: 'Smoothness',   weight: 0.20 },
+  { id: 'naturalness',   name: 'Naturalness',  weight: 0.20 },
+  { id: 'speed',         name: 'Speed',        weight: 0.15 },
+  { id: 'recovery',      name: 'Recovery',     weight: 0.15 },
+];
+
+const TAG_COLORS = {
+  baseline:     { bg:'#1a2030', color:'#60a5fa', border:'#1e3050' },
+  'fine-tuned': { bg:'#1a2820', color:'#34d399', border:'#1e4030' },
+  'cosmos-aug': { bg:'#2a1a40', color:'#a78bfa', border:'#3a2060' },
+  v1:           { bg:'#181820', color:'#94a3b8', border:'#252535' },
+  v2:           { bg:'#20180a', color:'#fbbf24', border:'#402810' },
+  v3:           { bg:'#0a2020', color:'#22d3ee', border:'#0f3535' },
+  act:          { bg:'#1a1a30', color:'#818cf8', border:'#252540' },
+  diffusion:    { bg:'#1a2a28', color:'#22d3ee', border:'#1e4040' },
+};
+
+const POLICIES = [
+  { id: 'pi0-base',       name: 'π0 Base',          description: 'Pretrained baseline',          task: 'sweater-fold', tags: ['baseline','pretrained'], scores: {task_success:5.2,smoothness:6.8,naturalness:6.1,speed:5.5,recovery:4.0}, history:[4.8,5.0,5.2,5.4,5.8], notes: 'Baseline for comparison. Struggles with crumpled cloth.', date:'2026-03-10' },
+  { id: 'pi0-ft-v1',      name: 'π0 FT v1',         description: '50-demo fine-tune',            task: 'sweater-fold', tags: ['fine-tuned','v1'],       scores: {task_success:7.4,smoothness:7.2,naturalness:7.0,speed:6.5,recovery:6.8}, history:[5.2,6.1,6.8,7.0,7.2], notes: 'Good improvement. Still struggles with edge cases and partial folds.', date:'2026-03-13' },
+  { id: 'pi0-ft-v2',      name: 'π0 FT v2',         description: '100-demo + Cosmos aug',        task: 'sweater-fold', tags: ['fine-tuned','cosmos-aug','v2'], scores: {task_success:8.6,smoothness:8.1,naturalness:7.8,speed:7.2,recovery:8.0}, history:[7.2,7.5,7.9,8.2,8.4], notes: 'Best performer. Cosmos augmentation clearly helps generalization. Recommend for further training.', date:'2026-03-16' },
+  { id: 'pi0-ft-v3',      name: 'π0 FT v3',         description: '200-demo + Cosmos aug v2',     task: 'sweater-fold', tags: ['fine-tuned','cosmos-aug','v3'], scores: {task_success:9.0,smoothness:8.4,naturalness:8.2,speed:7.6,recovery:8.5}, history:[8.4,8.6,8.7,8.9,9.0], notes: 'New SOTA. More diverse augmentation scenarios key improvement.', date:'2026-03-17' },
+  { id: 'act-baseline',   name: 'ACT Baseline',      description: 'Action Chunking Transformer',  task: 'sweater-fold', tags: ['act','baseline'],        scores: {task_success:6.0,smoothness:5.5,naturalness:5.8,speed:6.2,recovery:5.0}, history:[5.5,5.7,5.9,6.0,6.0], notes: 'Stable but limited recovery. Good execution speed.', date:'2026-03-11' },
+  { id: 'diffusion-pol',  name: 'Diffusion Policy',  description: 'DDPM-based diffusion',         task: 'sweater-fold', tags: ['diffusion','baseline'],   scores: {task_success:6.8,smoothness:7.5,naturalness:7.2,speed:5.0,recovery:5.5}, history:[6.0,6.2,6.5,6.7,6.8], notes: 'Smoothest motion. Slow execution compared to ACT.', date:'2026-03-12' },
+  { id: 'pi0-drawer',     name: 'π0 FT v3',          description: 'Same model, drawer task',     task: 'drawer-open',  tags: ['fine-tuned','cosmos-aug','v3'], scores: {task_success:8.2,smoothness:7.8,naturalness:7.5,speed:8.5,recovery:7.8}, history:[7.0,7.5,7.8,8.0,8.2], notes: 'Strong generalization from sweater task. Speed is a standout metric.', date:'2026-03-17' },
+  { id: 'act-drawer',     name: 'ACT Baseline',      description: 'ACT on drawer task',          task: 'drawer-open',  tags: ['act','baseline'],         scores: {task_success:6.5,smoothness:5.8,naturalness:6.2,speed:7.2,recovery:5.4}, history:[5.5,5.8,6.0,6.3,6.5], notes: 'Decent speed but less reliable on first attempt.', date:'2026-03-14' },
+];
+</script>
+<!-- ════════════════════════════════════ -->
+
+<script>
+// ── State ──
+let activeTask = 'all';
+let activeTags = new Set();
+let sortKey    = 'aggregate';
+let sortAsc    = false;
+let selectedId = null;
+
+// Parse URL hash for initial filter state
+function parseURLState() {
+  if (!window.location.hash) return;
+  try {
+    const s = JSON.parse(atob(window.location.hash.slice(1)));
+    if (s.task) activeTask = s.task;
+    if (s.tags) s.tags.forEach(t => activeTags.add(t));
+    if (s.sort) sortKey = s.sort;
+    if (s.selected) selectedId = s.selected;
+  } catch {}
+}
+parseURLState();
+
+// ── Compute aggregates ──
+function computeAgg(scores) {
+  const tw = DIMENSIONS.reduce((a,d)=>a+d.weight,0);
+  return DIMENSIONS.reduce((a,d)=>a+(scores[d.id]||0)*d.weight,0)/tw;
+}
+const POLICIES_AGG = POLICIES.map(p => ({ ...p, aggregate: computeAgg(p.scores) }));
+const ALL_TASKS = [...new Set(POLICIES.map(p=>p.task))];
+const ALL_TAGS  = [...new Set(POLICIES.flatMap(p=>p.tags))];
+
+function scoreColor(s, max=META.scoreScale) {
+  const p=s/max;
+  return p<0.5 ? `rgb(240,${Math.round(p*2*155+52)},52)` : `rgb(${Math.round((1-(p-0.5)*2)*240)},207,52)`;
+}
+
+// ── Build tag filters ──
+function buildTagFilters() {
+  const el = document.getElementById('tag-filters'); el.innerHTML='';
+  ALL_TAGS.forEach(tag => {
+    const c = document.createElement('div');
+    c.className = `filter-chip${activeTags.has(tag)?' active':''}`;
+    c.textContent = tag;
+    c.onclick = () => { activeTags.has(tag)?activeTags.delete(tag):activeTags.add(tag); buildTagFilters(); renderAll(); };
+    el.appendChild(c);
+  });
+}
+buildTagFilters();
+
+// ── Task tabs ──
+function buildTaskTabs() {
+  const el = document.getElementById('task-tabs'); el.innerHTML='';
+  ['all',...ALL_TASKS].forEach(t => {
+    const tab = document.createElement('div');
+    tab.className = `task-tab${t===activeTask?' active':''}`;
+    tab.textContent = t==='all' ? '🌐 All' : '📋 '+t;
+    tab.onclick = () => { activeTask=t; buildTaskTabs(); renderAll(); };
+    el.appendChild(tab);
+  });
+}
+buildTaskTabs();
+
+// ── Stats ──
+function renderStats(visible) {
+  const el = document.getElementById('stats-bar'); el.innerHTML='';
+  if (!visible.length) return;
+  const best = visible.reduce((a,b)=>b.aggregate>a.aggregate?b:a);
+  const avg  = visible.reduce((a,b)=>a+b.aggregate,0)/visible.length;
+  const tasks = [...new Set(visible.map(p=>p.task))];
+  el.innerHTML = `
+    <div class="stat-card"><div class="stat-lbl">🏆 Leader</div><div class="stat-val" style="font-size:14px;margin-top:4px">${best.name}</div></div>
+    <div class="stat-card"><div class="stat-lbl">📊 Avg Score</div><div class="stat-val" style="color:${scoreColor(avg)}">${avg.toFixed(2)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">📋 Policies</div><div class="stat-val">${visible.length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">📅 Latest</div><div class="stat-val" style="font-size:14px;margin-top:4px">${visible.reduce((a,b)=>b.date>a.date?b:a).date}</div></div>
+    <div class="stat-card"><div class="stat-lbl">🔢 Tasks</div><div class="stat-val">${tasks.length}</div></div>
+  `;
+}
+
+// ── Render table ──
+function renderAll() {
+  const query = document.getElementById('search').value.toLowerCase();
+  let visible = POLICIES_AGG.filter(p => {
+    if (activeTask!=='all' && p.task!==activeTask) return false;
+    if (activeTags.size>0 && !p.tags.some(t=>activeTags.has(t))) return false;
+    if (query && !p.name.toLowerCase().includes(query) && !p.description.toLowerCase().includes(query) && !p.tags.join(' ').toLowerCase().includes(query)) return false;
+    return true;
+  });
+
+  visible.sort((a,b) => {
+    let av = sortKey==='aggregate' ? a.aggregate : (sortKey==='name'?a.name:sortKey==='date'?a.date:(a.scores[sortKey]||0));
+    let bv = sortKey==='aggregate' ? b.aggregate : (sortKey==='name'?b.name:sortKey==='date'?b.date:(b.scores[sortKey]||0));
+    return sortAsc ? (av>bv?1:-1) : (av<bv?1:-1);
+  });
+
+  renderStats(visible);
+
+  // Head
+  const cols = [
+    {k:'rank',l:'#',s:false},{k:'name',l:'Policy',s:true},{k:'task',l:'Task',s:false},
+    {k:'aggregate',l:'Score',s:true},{k:'dims',l:'Dims',s:false},{k:'trend',l:'Trend',s:false},
+    {k:'date',l:'Date',s:true},{k:'delta',l:'△',s:false},{k:'notes',l:'Notes',s:false},
+  ];
+  document.getElementById('table-head').innerHTML=`<tr>${cols.map(c=>{const a=c.s&&sortKey===c.k;return`<th class="${a?'sort-active':''}${a&&sortAsc?' asc':''}" ${c.s?`onclick="setSort('${c.k}')"`:''}>${c.l}</th>`;}).join('')}</tr>`;
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML='';
+  visible.forEach((p,rank)=>{
+    const r=rank+1;
+    const medal=r===1?'🥇':r===2?'🥈':r===3?'🥉':'';
+    const rankCls=r===1?'rank-1':r===2?'rank-2':r===3?'rank-3':'rank-other';
+    const sc=scoreColor(p.aggregate);
+    const prev=p.history&&p.history.length>1?p.history[p.history.length-2]:null;
+    const delta=prev!=null?(p.aggregate-prev).toFixed(2):null;
+    const deltaHTML=delta!=null?`<span class="delta ${delta>0?'pos':delta<0?'neg':'neu'}">${delta>0?'▲':delta<0?'▼':'—'}${Math.abs(delta)}</span>`:'<span class="delta neu">—</span>';
+    const tagsHTML=p.tags.map(t=>{const tc=TAG_COLORS[t]||{bg:'#1a1a2a',color:'#888',border:'#252535'};return`<span class="policy-tag" style="background:${tc.bg};color:${tc.color};border:1px solid ${tc.border}">${t}</span>`;}).join('');
+    const sparkHTML=p.history&&p.history.length?`<div class="sparkline">${p.history.map((v,i)=>`<div class="spark-bar" style="height:${Math.round(v/META.scoreScale*24)}px;background:${scoreColor(v)};opacity:${i===p.history.length-1?1:0.5}"></div>`).join('')}</div>`:'-';
+    const dimBarsHTML=`<div class="dim-bars">${DIMENSIONS.map(d=>{const v=p.scores[d.id]||0;const pct=(v/META.scoreScale*100).toFixed(1);const c=scoreColor(v);return`<div class="dim-bar-row"><span class="dim-bar-label">${d.name}</span><div class="dim-bar-track"><div class="dim-bar-fill" style="width:${pct}%;background:${c}"></div></div><span class="dim-bar-val" style="color:${c}">${v}</span></div>`;}).join('')}</div>`;
+    const hasNotes=p.notes&&p.notes.length>0;
+
+    const tr=document.createElement('tr');
+    tr.className=selectedId===p.id?'selected':'';
+    tr.innerHTML=`
+      <td class="rank-cell">${medal?`<span style="font-size:16px">${medal}</span>`:`<span class="rank-num ${rankCls}">${r}</span>`}</td>
+      <td><div class="policy-name">${p.name}</div><div class="policy-meta">${p.description}</div><div class="policy-tags">${tagsHTML}</div></td>
+      <td><span style="font-size:11px;color:var(--muted)">${p.task}</span></td>
+      <td><div class="score-big" style="color:${sc}">${p.aggregate.toFixed(2)}</div><div style="font-size:10px;color:var(--muted)">/ ${META.scoreScale}</div></td>
+      <td>${dimBarsHTML}</td>
+      <td>${sparkHTML}</td>
+      <td style="font-size:11px;color:var(--muted)">${p.date}</td>
+      <td>${deltaHTML}</td>
+      <td>${hasNotes?`<span class="run-note-icon" title="${p.notes}">📝</span>`:'—'}</td>
+    `;
+    tr.onclick=()=>selectPolicy(p.id);
+    tbody.appendChild(tr);
+  });
+
+  if (selectedId) renderDetail(selectedId);
+}
+
+function setSort(k) { if(sortKey===k)sortAsc=!sortAsc; else{sortKey=k;sortAsc=false;} renderAll(); }
+
+// ── Detail panel with radar ──
+function selectPolicy(id) {
+  selectedId = id===selectedId ? null : id;
+  renderAll();
+}
+
+function renderDetail(id) {
+  const p = POLICIES_AGG.find(x=>x.id===id);
+  if (!p) return;
+  const panel = document.getElementById('detail-panel');
+  const sc = scoreColor(p.aggregate);
+
+  // SVG Radar chart
+  const cx=100,cy=100,r=70,n=DIMENSIONS.length;
+  const angles=DIMENSIONS.map((_,i)=>(-Math.PI/2+2*Math.PI*i/n));
+  const axisPoints=angles.map(a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)}));
+
+  // Grid circles (25%, 50%, 75%, 100%)
+  let gridSVG='', labelSVG='';
+  [0.25,0.5,0.75,1.0].forEach(fr=>{
+    const pts=angles.map(a=>`${cx+r*fr*Math.cos(a)},${cy+r*fr*Math.sin(a)}`).join(' ');
+    gridSVG+=`<polygon points="${pts}" fill="none" stroke="#1e1e32" stroke-width="1"/>`;
+    if(fr===1.0) labelSVG+=angles.map((a,i)=>`<text x="${cx+(r+12)*Math.cos(a)}" y="${cy+(r+12)*Math.sin(a)}" fill="#545470" font-size="9" text-anchor="middle" dominant-baseline="middle">${DIMENSIONS[i].name.split(' ')[0]}</text>`).join('');
+  });
+
+  // Axis lines
+  const axisLines=axisPoints.map(pt=>`<line x1="${cx}" y1="${cy}" x2="${pt.x}" y2="${pt.y}" stroke="#1e1e32" stroke-width="1"/>`).join('');
+
+  // Data polygon
+  const dataPts=angles.map((a,i)=>{const v=(p.scores[DIMENSIONS[i].id]||0)/META.scoreScale;return`${cx+r*v*Math.cos(a)},${cy+r*v*Math.sin(a)}`;}).join(' ');
+
+  const radarSVG=`<svg class="radar" width="200" height="200" viewBox="0 0 200 200">${gridSVG}${axisLines}${labelSVG}<polygon points="${dataPts}" fill="${sc}20" stroke="${sc}" stroke-width="2" stroke-linejoin="round"/>${angles.map((a,i)=>{const v=(p.scores[DIMENSIONS[i].id]||0)/META.scoreScale;return`<circle cx="${cx+r*v*Math.cos(a)}" cy="${cy+r*v*Math.sin(a)}" r="3" fill="${sc}"/>`;}).join('')}</svg>`;
+
+  // History pills
+  const histHTML=p.history&&p.history.length?`<div class="history-pills">${p.history.map((v,i)=>{const c=scoreColor(v);return`<span class="history-pill" style="background:${c}22;color:${c};border-color:${c}44">${v.toFixed(1)}</span>`;}).join('')}</div>`:'<span style="color:var(--muted);font-size:12px">No history</span>';
+
+  const tagsHTML=p.tags.map(t=>{const tc=TAG_COLORS[t]||{bg:'#1a1a2a',color:'#888',border:'#252535'};return`<span class="policy-tag" style="background:${tc.bg};color:${tc.color};border:1px solid ${tc.border};margin-right:4px">${t}</span>`;}).join('');
+
+  panel.innerHTML=`
+    <div class="detail-name">${p.name}</div>
+    <div class="detail-desc">${p.description}</div>
+    <div style="margin-bottom:8px">${tagsHTML}</div>
+    <div class="radar-wrap">${radarSVG}</div>
+    <div style="font-size:22px;font-weight:900;color:${sc};text-align:center;margin-bottom:4px">${p.aggregate.toFixed(2)}<span style="font-size:13px;color:var(--muted)"> / ${META.scoreScale}</span></div>
+    ${DIMENSIONS.map(d=>{const v=p.scores[d.id]||0;const pct=(v/META.scoreScale*100).toFixed(1);const c=scoreColor(v);return`<div class="detail-dim-row"><span class="detail-dim-name">${d.name}</span><div class="detail-dim-bar-track"><div class="detail-dim-bar-fill" style="width:${pct}%;background:${c}"></div></div><span class="detail-dim-val" style="color:${c}">${v}</span></div>`;}).join('')}
+    <div class="detail-section-title">Training History</div>
+    ${histHTML}
+    ${p.notes?`<div class="detail-section-title">Run Notes</div><div class="run-notes-text">${p.notes}</div>`:''}
+    <div style="margin-top:12px;font-size:11px;color:var(--muted)">Task: ${p.task} · ${p.date}</div>
+  `;
+}
+
+// ── Share URL ──
+function buildShareURL() {
+  const state = { task: activeTask, tags: [...activeTags], sort: sortKey };
+  if (selectedId) state.selected = selectedId;
+  return `${window.location.origin}${window.location.pathname}#${btoa(JSON.stringify(state))}`;
+}
+
+function copyShareURL() {
+  const url = buildShareURL();
+  window.history.replaceState(null, '', '#' + btoa(JSON.stringify({ task: activeTask, tags: [...activeTags], sort: sortKey })));
+  navigator.clipboard.writeText(url).then(() => showToast('🔗 Share URL copied!')).catch(() => showToast('Copy failed'));
+}
+
+// ── CSV ──
+function exportCSV() {
+  const cols = ['rank','id','name','description','task','tags','aggregate','date',...DIMENSIONS.map(d=>d.id),'notes'];
+  const rows = POLICIES_AGG.map((p,i)=>[i+1,p.id,p.name,p.description,p.task,p.tags.join('|'),p.aggregate.toFixed(3),p.date,...DIMENSIONS.map(d=>p.scores[d.id]||0),p.notes||'']);
+  const csv=[cols,...rows].map(r=>r.map(v=>JSON.stringify(v)).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'policy-leaderboard-v2.csv'});
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Exported ${rows.length} policies`);
+}
+
+// ── Toast ──
+let toastT;
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400);}
+
+// ── Init ──
+renderAll();
+if (selectedId) renderDetail(selectedId);
+</script>
+</body>
+</html>
