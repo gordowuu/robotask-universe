@@ -559,7 +559,7 @@
   <div id="header">
     <div id="header-top">
       <div id="header-title">
-        <h1>🤖 RoboTask Universe</h1>
+        <h1><span style="font-style:normal;color:initial">🤖</span> RoboTask Universe</h1>
         <p id="header-subtitle">The complete landscape of robot task demonstrations — what's been done, what's coming, and what's next</p>
       </div>
       <div id="legend">
@@ -2012,14 +2012,33 @@ function buildCategoryChips() {
   container.innerHTML = '';
   const categories = [...new Set(TASKS.map(t => t.category))];
 
+  function updateChipStyles() {
+    const allActive = activeCategories.size === categories.length;
+    document.getElementById('cat-all-btn').classList.toggle('active', allActive);
+    container.querySelectorAll('.cat-chip').forEach(chip => {
+      const active = activeCategories.has(chip.dataset.cat);
+      chip.classList.toggle('active', active);
+      const color = CATEGORY_COLORS[chip.dataset.cat] || '#888';
+      if (active) {
+        chip.style.background = color + '30';
+        chip.style.borderColor = color;
+        chip.style.opacity = '1';
+      } else {
+        chip.style.background = 'transparent';
+        chip.style.borderColor = color + '30';
+        chip.style.opacity = '0.4';
+      }
+    });
+  }
+
   const allBtn = document.createElement('button');
   allBtn.className = 'filter-btn active';
   allBtn.id = 'cat-all-btn';
   allBtn.textContent = 'All Categories';
   allBtn.style.fontSize = '11px';
   allBtn.addEventListener('click', () => {
-    activeCategories = new Set(Object.keys(CATEGORY_COLORS));
-    document.querySelectorAll('.cat-chip').forEach(c => c.classList.add('active'));
+    activeCategories = new Set(categories);
+    updateChipStyles();
     applyFilters();
   });
   container.appendChild(allBtn);
@@ -2030,17 +2049,26 @@ function buildCategoryChips() {
     chip.className = 'cat-chip active';
     chip.dataset.cat = cat;
     chip.textContent = cat;
-    chip.style.background = color + '20';
     chip.style.color = color;
-    chip.style.borderColor = color + '40';
+    chip.style.background = color + '30';
+    chip.style.borderColor = color;
+
     chip.addEventListener('click', () => {
-      if (activeCategories.has(cat)) {
+      const allActive = activeCategories.size === categories.length;
+      if (allActive) {
+        // First click on any chip: switch to exclusive mode — show only this category
+        activeCategories = new Set([cat]);
+      } else if (activeCategories.has(cat) && activeCategories.size === 1) {
+        // Clicking the only active chip: reset to all
+        activeCategories = new Set(categories);
+      } else if (activeCategories.has(cat)) {
+        // Remove this one from multi-select
         activeCategories.delete(cat);
-        chip.classList.remove('active');
       } else {
+        // Add to multi-select
         activeCategories.add(cat);
-        chip.classList.add('active');
       }
+      updateChipStyles();
       applyFilters();
     });
     container.appendChild(chip);
