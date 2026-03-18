@@ -507,9 +507,14 @@
   @media (max-width: 768px) {
     #stats-bar { gap: 12px; padding: 6px 12px; flex-wrap: wrap; }
     .stat-value { font-size: 14px; }
-    .stat-label { display: none; }
-    #filters { padding: 6px 12px; }
-    #search-input { width: 140px; }
+    /* mobile stat labels: keep but shrink */
+    .stat-label { font-size: 9px; }
+    .stat-value { font-size: 14px; }
+    #stats-bar { gap: 10px; padding: 6px 12px; flex-wrap: wrap; }
+    /* hide subtitle on mobile */
+    #header-subtitle { display: none; }
+    #filters { padding: 6px 10px; gap: 6px; }
+    #search-input { width: 120px; }
     #category-filters { display: none; }
     #category-filters.mobile-open { display: flex; }
     #mobile-filter-toggle {
@@ -523,6 +528,21 @@
     }
     #side-panel { width: 100%; }
     html, body { overflow: hidden; }
+    /* on mobile, hide less important list columns */
+    #list-table th[data-col="trl"],
+    #list-table td.col-trl,
+    #list-table th[data-col="companies"],
+    #list-table td.col-companies,
+    #list-table th[data-col="videos"],
+    #list-table td.col-videos,
+    #list-table th[data-col="dexterityRequired"],
+    #list-table td.col-dex { display: none; }
+    /* fixed column widths on mobile so status badge always fits */
+    .list-task-name { max-width: 55vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #list-table th[data-col="status"] { width: 56px; }
+    #list-table th[data-col="category"] { width: auto; }
+    /* panel badges: smaller on mobile */
+    .tt-badge { font-size: 10px; padding: 2px 6px; }
   }
   @media (min-width: 769px) {
     #mobile-filter-toggle { display: none; }
@@ -540,7 +560,7 @@
     <div id="header-top">
       <div id="header-title">
         <h1>🤖 RoboTask Universe</h1>
-        <p>The complete landscape of robot task demonstrations — what's been done, what's coming, and what's next</p>
+        <p id="header-subtitle">The complete landscape of robot task demonstrations — what's been done, what's coming, and what's next</p>
       </div>
       <div id="legend">
         <div class="legend-item"><span class="legend-dot-d">●</span> Demonstrated</div>
@@ -629,6 +649,10 @@
           <div class="panel-label">Description</div>
           <div class="panel-desc" id="panel-desc"></div>
         </div>
+        <div class="panel-section" id="panel-videos-section" style="display:none">
+          <div class="panel-label">📹 VIDEO REFERENCE</div>
+          <div id="panel-videos"></div>
+        </div>
         <div class="panel-section" id="panel-companies-section">
           <div class="panel-label">Companies</div>
           <div class="companies-list" id="panel-companies"></div>
@@ -655,11 +679,7 @@
           <div class="panel-label">🔗 SIMILAR TASKS</div>
           <div class="similar-tasks-list" id="panel-similar"></div>
         </div>
-        <div class="panel-section" id="panel-videos-section" style="display:none">
-          <hr class="divider">
-          <div class="panel-label">📹 VIDEO REFERENCE</div>
-          <div id="panel-videos"></div>
-        </div>
+
       </div>
     </div>
   </div>
@@ -2475,10 +2495,10 @@ function updateListView() {
       <td class="list-task-name">${task.name}</td>
       <td><div class="list-category-cell"><span class="list-category-dot" style="background:${catColor}"></span>${task.category}</div></td>
       <td><span class="tt-badge badge-sm ${badgeClass}">${statusLabel}</span></td>
-      <td>${dexLabels[task.dexterityRequired] || task.dexterityRequired}</td>
-      <td>${task.trl}/9</td>
-      <td style="color:var(--text-muted);font-size:12px">${coText}</td>
-      <td class="list-video-icon ${videoCount > 0 ? 'has-video' : ''}">${videoCount > 0 ? '🎥 ' + videoCount : '—'}</td>
+      <td class="col-dex">${dexLabels[task.dexterityRequired] || task.dexterityRequired}</td>
+      <td class="col-trl">${task.trl}/9</td>
+      <td class="col-companies" style="color:var(--text-muted);font-size:12px">${coText}</td>
+      <td class="col-videos list-video-icon ${videoCount > 0 ? 'has-video' : ''}">${videoCount > 0 ? '🎥 ' + videoCount : '—'}</td>
     `;
     tr.addEventListener('click', () => openPanel(task));
     tbody.appendChild(tr);
